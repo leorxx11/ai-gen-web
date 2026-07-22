@@ -1,12 +1,14 @@
 package com.leo.aigenweb.service;
 
-import cn.hutool.http.server.HttpServerRequest;
+import com.leo.aigenweb.model.dto.UserQueryRequest;
 import com.leo.aigenweb.model.vo.LoginUserVO;
+import com.leo.aigenweb.model.vo.UserVO;
+import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.leo.aigenweb.model.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 
-import java.net.http.HttpRequest;
+import java.util.List;
 
 /**
  * 用户 服务层。
@@ -23,9 +25,23 @@ public interface UserService extends IService<User> {
      */
     long userRegister(String userAccount,String userPassword,String checkPassword);
 
-    LoginUserVO getLoginUserVo(User user);
+    LoginUserVO getLoginUserVO(User user);
+    UserVO getUserVO(User user);
+    List<UserVO> getUserVOList(List<User> userList);
+
+    /**
+     * 分页查询请求 -> 数据库查询条件
+     * @param userQueryRequest 查询请求
+     * @return
+     */
+    QueryWrapper getQueryWrapper(UserQueryRequest userQueryRequest);
 
     LoginUserVO userLogin(String userAccount, String userPassword, HttpServletRequest request);
+
+    User getLoginUser(HttpServletRequest request);
+
+    Boolean userLogout(HttpServletRequest request);
+
 
     /**
      * 获取加密后的密码

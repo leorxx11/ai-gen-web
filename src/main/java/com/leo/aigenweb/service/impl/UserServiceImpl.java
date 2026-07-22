@@ -1,10 +1,13 @@
 package com.leo.aigenweb.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
+import com.leo.aigenweb.model.dto.UserQueryRequest;
 import com.leo.aigenweb.model.enums.UserRoleEnum;
 import com.leo.aigenweb.model.vo.LoginUserVO;
+import com.leo.aigenweb.model.vo.UserVO;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.leo.aigenweb.model.entity.User;
@@ -16,6 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.leo.aigenweb.constant.UserConstant.USER_LOGIN_STATE;
 
@@ -71,7 +77,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
     }
 
     @Override
-    public LoginUserVO getLoginUserVo(User user) {
+    public LoginUserVO getLoginUserVO(User user) {
         if(user == null){
             return null;
         }
@@ -80,6 +86,48 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         BeanUtils.copyProperties(user,loginUserVO);
 
         return loginUserVO;
+    }
+
+    @Override
+    public UserVO getUserVO(User user) {
+        if(user == null){
+            return null;
+        }
+        UserVO userVO = new UserVO();
+        BeanUtils.copyProperties(user,userVO);
+
+        return userVO;
+    }
+
+    @Override
+    public List<UserVO> getUserVOList(List<User> userList) {
+        if(CollUtil.isEmpty(userList)){
+            return new ArrayList<>();
+        }
+        return userList.stream()
+                .map(this::getUserVO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public QueryWrapper getQueryWrapper(UserQueryRequest userQueryRequest) {
+        if (userQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
+        }
+        Long id = userQueryRequest.getId();
+        String userAccount = userQueryRequest.getUserAccount();
+        String userName = userQueryRequest.getUserName();
+        String userProfile = userQueryRequest.getUserProfile();
+        String userRole = userQueryRequest.getUserRole();
+        String sortField = userQueryRequest.getSortField();
+        String sortOrder = userQueryRequest.getSortOrder();
+        return QueryWrapper.create()
+                .eq("id", id)
+                .eq("userRole", userRole)
+                .like("userAccount", userAccount)
+                .like("userName", userName)
+                .like("userProfile", userProfile)
+                .orderBy(sortField, "ascend".equals(sortOrder));
     }
 
     @Override
@@ -109,7 +157,35 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>  implements U
         // 记录用户登录态
         request.getSession().setAttribute(USER_LOGIN_STATE, user);
 
-        return this.getLoginUserVo(user);
+        return this.getLoginUserVO(user);
+    }
+
+    @Override
+    public User getLoginUser(HttpServletRequest request) {
+        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        User currentUser = (User) userObj;
+        if(currentUser == null || currentUser.getId() == null){
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+        // 从数据库查询当前用户信息
+        Long userId = currentUser.getId();
+        currentUser = this.getById(userId);
+        if(currentUser == null){
+            throw new BusinessException(ErrorCode.NOT_LOGIN_ERROR);
+        }
+        return currentUser;
+    }
+
+    @Override
+    public Boolean userLogout(HttpServletRequest request) {
+        Object userObj = request.getSession().getAttribute(USER_LOGIN_STATE);
+        if(userObj == null){
+            throw new BusinessException(ErrorCode.OPERATION_ERROR);
+        }
+
+        request.getSession().removeAttribute(USER_LOGIN_STATE);
+
+        return true;
     }
 
     @Override
