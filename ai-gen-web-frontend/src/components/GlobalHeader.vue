@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { h, ref, watch } from 'vue'
+import { computed, h, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeOutlined, InfoCircleOutlined } from '@ant-design/icons-vue'
-import type { MenuProps } from 'ant-design-vue'
+import { HomeOutlined, LogoutOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons-vue'
+import { message, type MenuProps } from 'ant-design-vue'
+import { logout } from '@/api/userController'
+import { useLoginUserStore } from '@/stores/loginUser'
 
 const route = useRoute()
 const router = useRouter()
+const loginUserStore = useLoginUserStore()
 
 // 菜单配置项，key 为路由路径，新增菜单只需在此追加配置
-const menuItems = ref<MenuProps['items']>([
+const originItems: MenuProps['items'] = [
   {
     key: '/',
     icon: () => h(HomeOutlined),
@@ -16,12 +19,23 @@ const menuItems = ref<MenuProps['items']>([
     title: '首页',
   },
   {
-    key: '/about',
-    icon: () => h(InfoCircleOutlined),
-    label: '关于',
-    title: '关于',
+    key: '/admin/userManage',
+    icon: () => h(TeamOutlined),
+    label: '用户管理',
+    title: '用户管理',
   },
-])
+]
+
+// 根据登录用户权限过滤菜单：管理员页面仅对 admin 展示
+const menuItems = computed<MenuProps['items']>(() =>
+  originItems?.filter((item) => {
+    const key = String(item?.key ?? '')
+    if (key.startsWith('/admin')) {
+      return loginUserStore.loginUser.userRole === 'admin'
+    }
+    return true
+  }),
+)
 
 // 当前选中的菜单项，跟随路由变化
 const selectedKeys = ref<string[]>([route.path])
@@ -35,6 +49,18 @@ watch(
 // 点击菜单跳转到对应路由
 const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
   router.push(String(key))
+}
+
+// 用户注销
+const doLogout = async () => {
+  const res = await logout()
+  if (res.data.code === 0) {
+    loginUserStore.setLoginUser({ userName: '未登录' })
+    message.success('退出登录成功')
+    router.push('/user/login')
+  } else {
+    message.error('退出登录失败：' + res.data.message)
+  }
 }
 </script>
 
@@ -57,9 +83,29 @@ const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
           @click="handleMenuClick"
         />
       </a-col>
-      <!-- 右侧：用户操作区（暂用登录按钮替代用户头像和昵称） -->
+      <!-- 右侧：用户操作区 -->
       <a-col flex="120px" class="header-right">
-        <a-button type="primary">登录</a-button>
+        <div v-if="loginUserStore.loginUser.id">
+          <a-dropdown>
+            <a-space class="user-info">
+              <a-avatar :src="loginUserStore.loginUser.userAvatar">
+                <template #icon><UserOutlined /></template>
+              </a-avatar>
+              {{ loginUserStore.loginUser.userName ?? '无名' }}
+            </a-space>
+            <template #overlay>
+              <a-menu>
+                <a-menu-item @click="doLogout">
+                  <LogoutOutlined />
+                  退出登录
+                </a-menu-item>
+              </a-menu>
+            </template>
+          </a-dropdown>
+        </div>
+        <div v-else>
+          <a-button type="primary" href="/user/login">登录</a-button>
+        </div>
       </a-col>
     </a-row>
   </a-layout-header>
@@ -103,6 +149,10 @@ const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
 
 .header-right {
   text-align: right;
+}
+
+.user-info {
+  cursor: pointer;
 }
 
 /* 小屏幕下隐藏网站标题，保证菜单和按钮有足够空间 */
