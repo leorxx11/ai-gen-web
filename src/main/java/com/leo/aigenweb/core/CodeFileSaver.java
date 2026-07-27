@@ -9,7 +9,8 @@ import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 
 import java.io.File;
 
-public class codeFileSaver {
+@Deprecated
+public class CodeFileSaver {
 
     // 文件保存的根目录
     private static final String FILE_SAVE_ROOT_DIR = System.getProperty("user.dir") + File.separator +"tmp"+ File.separator +"code_output";
