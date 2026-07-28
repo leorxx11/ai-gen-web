@@ -1,6 +1,6 @@
 package com.leo.aigenweb.service;
 
-import com.leo.aigenweb.model.dto.UserQueryRequest;
+import com.leo.aigenweb.model.dto.user.UserQueryRequest;
 import com.leo.aigenweb.model.vo.LoginUserVO;
 import com.leo.aigenweb.model.vo.UserVO;
 import com.mybatisflex.core.query.QueryWrapper;

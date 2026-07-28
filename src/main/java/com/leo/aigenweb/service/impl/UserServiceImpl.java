@@ -4,7 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
-import com.leo.aigenweb.model.dto.UserQueryRequest;
+import com.leo.aigenweb.model.dto.user.UserQueryRequest;
 import com.leo.aigenweb.model.enums.UserRoleEnum;
 import com.leo.aigenweb.model.vo.LoginUserVO;
 import com.leo.aigenweb.model.vo.UserVO;

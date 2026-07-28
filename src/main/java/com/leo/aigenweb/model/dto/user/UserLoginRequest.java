@@ -1,4 +1,4 @@
-package com.leo.aigenweb.model.dto;
+package com.leo.aigenweb.model.dto.user;
 
 import lombok.Data;
 

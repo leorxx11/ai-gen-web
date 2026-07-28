@@ -1,10 +1,27 @@
 package com.leo.aigenweb.service.impl;
 
+import cn.hutool.core.collection.CollUtil;
+import com.leo.aigenweb.exception.BusinessException;
+import com.leo.aigenweb.exception.ErrorCode;
+import com.leo.aigenweb.model.dto.app.AppQueryRequest;
+import com.leo.aigenweb.model.entity.User;
+import com.leo.aigenweb.model.vo.AppVO;
+import com.leo.aigenweb.model.vo.UserVO;
+import com.leo.aigenweb.service.UserService;
+import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.leo.aigenweb.model.entity.App;
 import com.leo.aigenweb.mapper.AppMapper;
 import com.leo.aigenweb.service.AppService;
+import jakarta.annotation.Resource;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 应用 服务层实现。
@@ -14,4 +31,70 @@ import org.springframework.stereotype.Service;
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppService{
 
+    @Resource
+    private UserService userService;
+
+    @Override
+    public AppVO getAppVO(App app) {
+        if (app == null) {
+            return null;
+        }
+        AppVO appVO = new AppVO();
+        BeanUtils.copyProperties(app, appVO);
+        // 关联查询创建用户信息
+        Long userId = app.getUserId();
+        if (userId != null) {
+            User user = userService.getById(userId);
+            appVO.setUser(userService.getUserVO(user));
+        }
+        return appVO;
+    }
+
+    @Override
+    public List<AppVO> getAppVOList(List<App> appList) {
+        if (CollUtil.isEmpty(appList)) {
+            return new ArrayList<>();
+        }
+        // 批量查询创建用户信息，避免逐条查询
+        Set<Long> userIdSet = appList.stream()
+                .map(App::getUserId)
+                .collect(Collectors.toSet());
+        Map<Long, UserVO> userVOMap = userService.listByIds(userIdSet).stream()
+                .collect(Collectors.toMap(User::getId, userService::getUserVO));
+        return appList.stream()
+                .map(app -> {
+                    AppVO appVO = new AppVO();
+                    BeanUtils.copyProperties(app, appVO);
+                    appVO.setUser(userVOMap.get(app.getUserId()));
+                    return appVO;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public QueryWrapper getQueryWrapper(AppQueryRequest appQueryRequest) {
+        if (appQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请求参数为空");
+        }
+        Long id = appQueryRequest.getId();
+        String appName = appQueryRequest.getAppName();
+        String cover = appQueryRequest.getCover();
+        String initPrompt = appQueryRequest.getInitPrompt();
+        String codeGenType = appQueryRequest.getCodeGenType();
+        String deployKey = appQueryRequest.getDeployKey();
+        Integer priority = appQueryRequest.getPriority();
+        Long userId = appQueryRequest.getUserId();
+        String sortField = appQueryRequest.getSortField();
+        String sortOrder = appQueryRequest.getSortOrder();
+        return QueryWrapper.create()
+                .eq("id", id)
+                .like("appName", appName)
+                .like("cover", cover)
+                .like("initPrompt", initPrompt)
+                .eq("codeGenType", codeGenType)
+                .eq("deployKey", deployKey)
+                .eq("priority", priority)
+                .eq("userId", userId)
+                .orderBy(sortField, "ascend".equals(sortOrder));
+    }
 }

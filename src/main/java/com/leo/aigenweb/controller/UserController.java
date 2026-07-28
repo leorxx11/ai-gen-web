@@ -9,7 +9,7 @@ import com.leo.aigenweb.constant.UserConstant;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.exception.ThrowUtils;
-import com.leo.aigenweb.model.dto.*;
+import com.leo.aigenweb.model.dto.user.*;
 import com.leo.aigenweb.model.vo.LoginUserVO;
 import com.leo.aigenweb.model.vo.UserVO;
 import com.mybatisflex.core.paginate.Page;
@@ -42,7 +42,7 @@ public class UserController {
      * @return 新用户 id
      */
     @PostMapping("/register")
-    public BaseResponse<Long> register(@RequestBody UserRegisterRequest  userRegisterRequest) {
+    public BaseResponse<Long> register(@RequestBody UserRegisterRequest userRegisterRequest) {
         ThrowUtils.throwIf(userRegisterRequest == null, ErrorCode.PARAMS_ERROR);
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
