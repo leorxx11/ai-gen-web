@@ -6,6 +6,10 @@ import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 
+/**
+ * HTML 代码保存器
+ *
+ */
 public class HtmlCodeFileSaverTemplate extends CodeFileSaverTemplate<HtmlCodeResult> {
 
     @Override

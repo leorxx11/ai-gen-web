@@ -2,6 +2,7 @@ package com.leo.aigenweb.controller;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.leo.aigenweb.annotation.AuthCheck;
 import com.leo.aigenweb.common.BaseResponse;
 import com.leo.aigenweb.common.DeleteRequest;
@@ -22,16 +23,17 @@ import com.leo.aigenweb.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.*;
 import com.leo.aigenweb.model.entity.App;
 import com.leo.aigenweb.service.AppService;
-import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 应用 控制层。
@@ -47,6 +49,45 @@ public class AppController {
 
     @Resource
     private UserService userService;
+
+
+    /**
+     * 与应用进行聊天以生成代码
+     *
+     * @param appId   应用 ID
+     * @param message 提示词
+     * @param request HttpServletRequest
+     * @return 生成的代码流
+     */
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE) //
+    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
+                                                       @RequestParam String message,
+                                                       HttpServletRequest request) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "提示);词不能为空");
+        // 获取登录用户
+        User loginUser = userService.getLoginUser(request);
+        // SSE 流式返回
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser);
+        // 转换为ServerSentEvent事件
+        return contentFlux
+                .map(chunk -> {
+                    // 包装为 JSON（防止空格丢失）
+                    Map<String, String> wrapper = Map.of("d", chunk);
+                    String jsonData = JSONUtil.toJsonStr(wrapper);
+                    return ServerSentEvent.<String>builder()
+                            .data(jsonData)
+                            .build();
+                })
+                // 增加事件完成响应
+                .concatWith(Mono.just(
+                        ServerSentEvent.<String>builder()
+                                .event("done")
+                                .data("")
+                                .build()
+                ));
+    }
+
 
     /**
      * 创建应用
