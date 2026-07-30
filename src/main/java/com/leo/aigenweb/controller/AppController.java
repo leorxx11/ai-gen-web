@@ -12,10 +12,7 @@ import com.leo.aigenweb.constant.UserConstant;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.exception.ThrowUtils;
-import com.leo.aigenweb.model.dto.app.AppAddRequest;
-import com.leo.aigenweb.model.dto.app.AppAdminUpdateRequest;
-import com.leo.aigenweb.model.dto.app.AppQueryRequest;
-import com.leo.aigenweb.model.dto.app.AppUpdateRequest;
+import com.leo.aigenweb.model.dto.app.*;
 import com.leo.aigenweb.model.entity.User;
 import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 import com.leo.aigenweb.model.vo.AppVO;
@@ -86,6 +83,25 @@ public class AppController {
                                 .data("")
                                 .build()
                 ));
+    }
+
+    /**
+     * 部署应用
+     *
+     * @param appDeployRequest 部署请求
+     * @param request HttpServletRequest
+     * @return 部署后的应用访问地址
+     */
+    @PostMapping("/deploy")
+    public BaseResponse<String> deployApp(@RequestBody AppDeployRequest appDeployRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(appDeployRequest == null, ErrorCode.PARAMS_ERROR);
+        Long appId = appDeployRequest.getAppId();
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        // 获取登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 部署应用
+        String appUrl = appService.deployApp(appId, loginUser);
+        return ResultUtils.success(appUrl);
     }
 
 
