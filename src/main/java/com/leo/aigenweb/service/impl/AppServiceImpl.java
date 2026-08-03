@@ -11,9 +11,11 @@ import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.exception.ThrowUtils;
 import com.leo.aigenweb.model.dto.app.AppQueryRequest;
 import com.leo.aigenweb.model.entity.User;
+import com.leo.aigenweb.model.enums.ChatHistoryMessageTypeEnum;
 import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 import com.leo.aigenweb.model.vo.AppVO;
 import com.leo.aigenweb.model.vo.UserVO;
+import com.leo.aigenweb.service.ChatHistoryService;
 import com.leo.aigenweb.service.UserService;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -21,11 +23,13 @@ import com.leo.aigenweb.model.entity.App;
 import com.leo.aigenweb.mapper.AppMapper;
 import com.leo.aigenweb.service.AppService;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,6 +39,7 @@ import java.util.stream.Collectors;
  *
  * @author leo
  */
+@Slf4j
 @Service
 public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppService {
 
@@ -42,6 +47,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private UserService userService;
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+    @Resource
+    private ChatHistoryService chatHistoryService;
 
     @Override
     public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
@@ -64,8 +71,52 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "不支持的代码生成类型");
         }
 
+        // 通过校验后，先保存用户消息到对话历史
+        chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
+
         // 调用 AI 生成代码
-        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        // 收集 AI 响应内容，在流式返回完成后保存到对话历史
+        StringBuilder aiResponseBuilder = new StringBuilder();
+        return codeStream
+                .doOnNext(aiResponseBuilder::append)
+                .doOnComplete(() -> {
+                    // AI 回复成功，保存 AI 消息
+                    String aiResponse = aiResponseBuilder.toString();
+                    if (StrUtil.isNotBlank(aiResponse)) {
+                        chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                    }
+                })
+                .doOnError(error -> {
+                    // AI 回复失败，也要保存错误信息，确保对话的完整性
+                    String errorMessage = "AI 回复失败：" + error.getMessage();
+                    chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+                });
+    }
+
+    /**
+     * 删除应用时，关联删除该应用的对话历史
+     *
+     * @param id 应用 ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean removeById(Serializable id) {
+        if (id == null) {
+            return false;
+        }
+        long appId = Long.parseLong(id.toString());
+        if (appId <= 0) {
+            return false;
+        }
+        // 先删除关联的对话历史，删除失败仅记录日志，不阻塞应用删除
+        try {
+            chatHistoryService.deleteByAppId(appId);
+        } catch (Exception e) {
+            log.error("删除应用关联对话历史失败：{}", e.getMessage());
+        }
+        // 再删除应用
+        return super.removeById(id);
     }
 
     @Override
