@@ -108,12 +108,12 @@ const doSearchGoodApps = () => {
   fetchGoodApps()
 }
 
-// 点击卡片进入对话页：带 view=1 表示仅查看，不自动发送初始提示词重新生成
+// 点击卡片进入对话页（是否自动触发生成由对话页根据对话历史判断）
 const goToChat = (app: API.AppVO) => {
   if (!app.id) {
     return
   }
-  router.push(`/app/chat/${app.id}?view=1`)
+  router.push(`/app/chat/${app.id}`)
 }
 </script>
 

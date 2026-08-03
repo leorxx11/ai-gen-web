@@ -5,6 +5,7 @@ import {
   AppstoreOutlined,
   HomeOutlined,
   LogoutOutlined,
+  MessageOutlined,
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue'
@@ -35,6 +36,12 @@ const originItems: MenuProps['items'] = [
     icon: () => h(AppstoreOutlined),
     label: '应用管理',
     title: '应用管理',
+  },
+  {
+    key: '/admin/chatManage',
+    icon: () => h(MessageOutlined),
+    label: '对话管理',
+    title: '对话管理',
   },
 ]
 

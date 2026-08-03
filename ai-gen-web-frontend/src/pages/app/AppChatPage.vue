@@ -14,6 +14,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons-vue'
 import { deleteApp, deleteAppByAdmin, deployApp, getAppVoById } from '@/api/appController'
+import { listAppChatHistory } from '@/api/chatHistoryController'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
 import { useLoginUserStore } from '@/stores/loginUser'
 import AppDetailModal from '@/components/AppDetailModal.vue'
@@ -31,8 +32,6 @@ const appId = String(route.params.id ?? '')
 // 应用信息
 const appInfo = ref<API.AppVO>()
 
-// 是否为查看模式（卡片 / 详情等入口携带 view=1，仅查看，不自动发送初始提示词）
-const isViewMode = computed(() => route.query.view === '1')
 // 后端仅允许创建者对话和部署
 const isOwner = computed(
   () => !!appInfo.value?.userId && appInfo.value.userId === loginUserStore.loginUser.id,
@@ -56,6 +55,62 @@ const messageListRef = ref<HTMLDivElement>()
 let eventSource: EventSource | null = null
 // 流式内容批量刷新的定时器
 let flushTimer: number | null = null
+
+// —— 对话历史 ——
+const HISTORY_PAGE_SIZE = 10
+const historyLoading = ref(false)
+// 是否还有更早的历史消息可加载
+const hasMoreHistory = ref(false)
+// 游标：当前已加载的最早一条消息的创建时间
+let historyCursor: string | undefined
+
+// 游标分页加载对话历史：首次加载最近 10 条，加载更多时取游标之前的一页
+const loadChatHistory = async (loadMore = false) => {
+  if (historyLoading.value) {
+    return
+  }
+  historyLoading.value = true
+  try {
+    const res = await listAppChatHistory({
+      appId: appId as unknown as number,
+      pageSize: HISTORY_PAGE_SIZE,
+      lastCreateTime: loadMore ? historyCursor : undefined,
+    })
+    if (res.data.code === 0 && res.data.data) {
+      const records = res.data.data.records ?? []
+      // 接口按创建时间降序返回，反转为升序后插入消息列表头部
+      const historyMessages: ChatMessage[] = [...records].reverse().map((record) => ({
+        role: record.messageType === 'user' ? 'user' : 'ai',
+        content: record.message ?? '',
+      }))
+      messages.value.unshift(...historyMessages)
+      // 更新游标为已加载的最早一条消息的创建时间
+      const oldest = records[records.length - 1]
+      if (oldest) {
+        historyCursor = oldest.createTime
+      }
+      // 取满一页说明可能还有更早的消息
+      hasMoreHistory.value = records.length === HISTORY_PAGE_SIZE
+    } else {
+      message.error('加载对话历史失败：' + res.data.message)
+    }
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+// 点击加载更多：加载后保持视口停留在原来阅读的位置
+const loadMoreHistory = async () => {
+  const el = messageListRef.value
+  const prevScrollHeight = el?.scrollHeight ?? 0
+  const prevScrollTop = el?.scrollTop ?? 0
+  await loadChatHistory(true)
+  nextTick(() => {
+    if (el) {
+      el.scrollTop = el.scrollHeight - prevScrollHeight + prevScrollTop
+    }
+  })
+}
 
 // 权限校验：只有本人能在自己的作品下对话
 const inputDisabled = computed(() => !isOwner.value || isStreaming.value)
@@ -95,24 +150,40 @@ const showExistingPreview = async () => {
   }
 }
 
-// 获取应用信息；不带 view 参数视为新创建进入，自动发送初始提示词开始生成
+// 获取应用信息
 const fetchAppInfo = async () => {
   const res = await getAppVoById({ id: appId as unknown as number })
   if (res.data.code === 0 && res.data.data) {
     appInfo.value = res.data.data
-    if (!isViewMode.value && isOwner.value && appInfo.value.initPrompt) {
-      // 触发生成后把地址替换为查看模式，防止刷新或回退时重复生成
-      router.replace(`/app/chat/${appId}?view=1`)
-      sendMessage(appInfo.value.initPrompt)
-    } else {
-      showExistingPreview()
-    }
   } else {
     message.error('获取应用信息失败：' + res.data.message)
   }
 }
 
-onMounted(fetchAppInfo)
+// 进入页面：先加载应用信息和对话历史，再决定是否自动触发生成
+onMounted(async () => {
+  await fetchAppInfo()
+  if (!appInfo.value) {
+    return
+  }
+  // 对话历史仅应用创建者和管理员可见
+  if (isOwner.value || isAdmin.value) {
+    await loadChatHistory()
+    scrollToBottom()
+    // 自己的应用且没有任何对话历史，才自动发送初始提示词触发生成
+    if (isOwner.value && messages.value.length === 0 && appInfo.value.initPrompt) {
+      sendMessage(appInfo.value.initPrompt)
+      return
+    }
+    // 已有至少 2 条对话记录（一问一答），说明生成过网站，直接展示
+    if (messages.value.length >= 2) {
+      showExistingPreview()
+    }
+  } else {
+    // 非本人应用看不到历史，直接尝试展示已生成的网站
+    showExistingPreview()
+  }
+})
 
 // 消息更新后滚动到底部
 const scrollToBottom = () => {
@@ -308,6 +379,12 @@ const doDelete = () => {
       <!-- 对话区域 -->
       <div class="chat-panel">
         <div ref="messageListRef" class="message-list">
+          <!-- 加载更多历史消息 -->
+          <div v-if="hasMoreHistory" class="load-more">
+            <a-button type="link" size="small" :loading="historyLoading" @click="loadMoreHistory">
+              加载更多历史消息
+            </a-button>
+          </div>
           <a-empty
             v-if="messages.length === 0"
             description="暂无对话，快来和 AI 一起创作吧"
@@ -451,6 +528,11 @@ const doDelete = () => {
   flex: 1;
   padding-right: 8px;
   overflow-y: auto;
+}
+
+.load-more {
+  margin-bottom: 8px;
+  text-align: center;
 }
 
 .message-empty {

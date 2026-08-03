@@ -4,6 +4,7 @@ import UserLoginPage from '@/pages/user/UserLoginPage.vue'
 import UserRegisterPage from '@/pages/user/UserRegisterPage.vue'
 import UserManagePage from '@/pages/admin/UserManagePage.vue'
 import AppManagePage from '@/pages/admin/AppManagePage.vue'
+import ChatHistoryManagePage from '@/pages/admin/ChatHistoryManagePage.vue'
 import AppChatPage from '@/pages/app/AppChatPage.vue'
 import AppEditPage from '@/pages/app/AppEditPage.vue'
 
@@ -48,6 +49,14 @@ const router = createRouter({
       path: '/admin/appManage',
       name: 'appManage',
       component: AppManagePage,
+      meta: {
+        access: 'admin',
+      },
+    },
+    {
+      path: '/admin/chatManage',
+      name: 'chatManage',
+      component: ChatHistoryManagePage,
       meta: {
         access: 'admin',
       },
