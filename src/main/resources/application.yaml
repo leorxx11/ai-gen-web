@@ -10,12 +10,28 @@ spring:
   profiles:
     active:
       - local
+  session:
+    store-type: redis
+    # 30 天过期
+    timeout: 2592000
+
+  # redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
+      password:
+      database: 0
 
 
 server:
   port: 8123
   servlet:
     context-path: /api
+    session:
+      cookie:
+        max-age: 2592000
 
 # springdoc-openapi
 springdoc:
