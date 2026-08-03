@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { deleteUser, listUserVoByPage, updateUser } from '@/api/userController'
+import { formatDateTime } from '@/utils/time'
 
 // 表格列配置
 const columns = [
@@ -140,7 +141,7 @@ const doEdit = async () => {
           <a-tag v-else color="blue">普通用户</a-tag>
         </template>
         <template v-else-if="column.dataIndex === 'createTime'">
-          {{ record.createTime ? new Date(record.createTime).toLocaleString() : '-' }}
+          {{ formatDateTime(record.createTime) }}
         </template>
         <template v-else-if="column.key === 'action'">
           <a-space>

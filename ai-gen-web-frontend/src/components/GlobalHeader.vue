@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, h, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { HomeOutlined, LogoutOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons-vue'
+import {
+  AppstoreOutlined,
+  HomeOutlined,
+  LogoutOutlined,
+  TeamOutlined,
+  UserOutlined,
+} from '@ant-design/icons-vue'
 import { message, type MenuProps } from 'ant-design-vue'
 import { logout } from '@/api/userController'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -23,6 +29,12 @@ const originItems: MenuProps['items'] = [
     icon: () => h(TeamOutlined),
     label: '用户管理',
     title: '用户管理',
+  },
+  {
+    key: '/admin/appManage',
+    icon: () => h(AppstoreOutlined),
+    label: '应用管理',
+    title: '应用管理',
   },
 ]
 
@@ -160,5 +172,12 @@ const doLogout = async () => {
   .site-title {
     display: none;
   }
+}
+</style>
+
+<!-- 下拉菜单浮层挂载在 body 下，作用不到 scoped 样式，需用全局样式防止菜单项文字换行 -->
+<style>
+.ant-dropdown .ant-dropdown-menu-item {
+  white-space: nowrap;
 }
 </style>
