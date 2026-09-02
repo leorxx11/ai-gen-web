@@ -65,7 +65,7 @@ public class AiCodeGeneratorServiceFactory {
     public AiCodeGeneratorService getAiCodeGeneratorService(long appId, CodeGenTypeEnum codeGenTypeEnum) {
 
         String cacheKey = buildCacheKey(appId, codeGenTypeEnum);
-        return serviceCache.get(cacheKey, ket -> createAiCodeGeneratorService(appId, codeGenTypeEnum));
+        return serviceCache.get(cacheKey, key -> createAiCodeGeneratorService(appId, codeGenTypeEnum));
     }
 
     private String buildCacheKey(long appId, CodeGenTypeEnum codeGenTypeEnum){

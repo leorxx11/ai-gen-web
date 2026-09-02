@@ -6,6 +6,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.leo.aigenweb.constant.AppConstant;
 import com.leo.aigenweb.core.AiCodeGeneratorFacade;
+import com.leo.aigenweb.core.handler.StreamHandlerExecutor;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.exception.ThrowUtils;
@@ -49,6 +50,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
     @Resource
     private ChatHistoryService chatHistoryService;
+    @Resource
+    private StreamHandlerExecutor streamHandlerExecutor;
 
     @Override
     public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
@@ -77,21 +80,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         // 调用 AI 生成代码
         Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
         // 收集 AI 响应内容，在流式返回完成后保存到对话历史
-        StringBuilder aiResponseBuilder = new StringBuilder();
-        return codeStream
-                .doOnNext(aiResponseBuilder::append)
-                .doOnComplete(() -> {
-                    // AI 回复成功，保存 AI 消息
-                    String aiResponse = aiResponseBuilder.toString();
-                    if (StrUtil.isNotBlank(aiResponse)) {
-                        chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                    }
-                })
-                .doOnError(error -> {
-                    // AI 回复失败，也要保存错误信息，确保对话的完整性
-                    String errorMessage = "AI 回复失败：" + error.getMessage();
-                    chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-                });
+        return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
     }
 
     /**
