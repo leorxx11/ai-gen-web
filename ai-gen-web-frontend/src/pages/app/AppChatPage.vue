@@ -16,6 +16,7 @@ import {
 import { deleteApp, deleteAppByAdmin, deployApp, getAppVoById } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+import { VUE_PROJECT_CODE_GEN_TYPE } from '@/constants/app'
 import { useLoginUserStore } from '@/stores/loginUser'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
@@ -51,6 +52,7 @@ interface ChatMessage {
 const messages = ref<ChatMessage[]>([])
 const userInput = ref('')
 const isStreaming = ref(false)
+const isBuilding = ref(false)
 const messageListRef = ref<HTMLDivElement>()
 let eventSource: EventSource | null = null
 // 流式内容批量刷新的定时器
@@ -113,7 +115,7 @@ const loadMoreHistory = async () => {
 }
 
 // 权限校验：只有本人能在自己的作品下对话
-const inputDisabled = computed(() => !isOwner.value || isStreaming.value)
+const inputDisabled = computed(() => !isOwner.value || isStreaming.value || isBuilding.value)
 const inputPlaceholder = computed(() =>
   !isOwner.value ? '无法在别人的作品下对话哦~' : '描述越详细，页面越具体，可以一步一步完善生成效果',
 )
@@ -124,6 +126,8 @@ const inputTooltip = computed(() =>
 
 // —— 生成的网页预览 ——
 const previewUrl = ref('')
+const PREVIEW_POLL_INTERVAL_MS = 1000
+const PREVIEW_POLL_MAX_ATTEMPTS = 480
 
 // 生成完成后展示网站效果，附加时间戳强制 iframe 加载最新版本
 const updatePreview = () => {
@@ -134,19 +138,39 @@ const updatePreview = () => {
 }
 
 // 应用此前生成过网站时直接加载预览；未生成则保持占位提示，避免 iframe 展示 404
-const showExistingPreview = async () => {
+const showExistingPreview = async (generatedAfter?: number): Promise<boolean> => {
   if (!appInfo.value?.codeGenType) {
-    return
+    return false
   }
   const url = getStaticPreviewUrl(appInfo.value.codeGenType, appId)
   try {
     // 用 GET 探测（后端 CORS 未放行 HEAD 方法，HEAD 请求会被拦截）
-    const resp = await fetch(url, { credentials: 'include' })
-    if (resp.ok) {
+    const resp = await fetch(url, { credentials: 'include', cache: 'no-store' })
+    const lastModified = Date.parse(resp.headers.get('Last-Modified') ?? '')
+    if (resp.ok && (!generatedAfter || lastModified > generatedAfter)) {
       previewUrl.value = `${url}?t=${Date.now()}`
+      return true
     }
   } catch {
     // 探测失败视为未生成
+  }
+  return false
+}
+
+// VUE 工程在流式响应结束后异步构建，构建产物可访问后再刷新预览
+const waitForVuePreview = async (generatedAfter: number) => {
+  isBuilding.value = true
+  for (let attempt = 0; attempt < PREVIEW_POLL_MAX_ATTEMPTS && isBuilding.value; attempt++) {
+    if (await showExistingPreview(generatedAfter)) {
+      isBuilding.value = false
+      message.success('网站生成完成')
+      return
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, PREVIEW_POLL_INTERVAL_MS))
+  }
+  if (isBuilding.value) {
+    isBuilding.value = false
+    message.error('VUE 工程构建超时，请查看后端构建日志')
   }
 }
 
@@ -205,13 +229,17 @@ const closeEventSource = () => {
 }
 
 // 离开页面时断开 SSE 连接
-onBeforeUnmount(closeEventSource)
+onBeforeUnmount(() => {
+  closeEventSource()
+  isBuilding.value = false
+})
 
 // 通过 SSE 与 AI 对话生成代码，流式展示回复
 const sendMessage = (content: string) => {
   if (isStreaming.value) {
     return
   }
+  const generationStartedAt = Math.floor(Date.now() / 1000) * 1000
   messages.value.push({ role: 'user', content })
   // 占位的 AI 消息，收到流式内容后逐段追加
   const aiMessage = reactive<ChatMessage>({
@@ -269,8 +297,12 @@ const sendMessage = (content: string) => {
   // 后端发送 done 事件表示网站文件全部生成完成
   eventSource.addEventListener('done', () => {
     finishStream()
-    updatePreview()
-    message.success('网站生成完成')
+    if (appInfo.value?.codeGenType === VUE_PROJECT_CODE_GEN_TYPE) {
+      void waitForVuePreview(generationStartedAt)
+    } else {
+      updatePreview()
+      message.success('网站生成完成')
+    }
   })
   eventSource.onerror = () => {
     finishStream()
@@ -368,7 +400,13 @@ const doDelete = () => {
           </a-menu>
         </template>
       </a-dropdown>
-      <a-button v-if="isOwner" type="primary" :loading="deploying" @click="doDeploy">
+      <a-button
+        v-if="isOwner"
+        type="primary"
+        :loading="deploying"
+        :disabled="isStreaming || isBuilding"
+        @click="doDeploy"
+      >
         <template #icon><CloudUploadOutlined /></template>
         部署
       </a-button>
@@ -454,7 +492,11 @@ const doDelete = () => {
         <div v-else class="preview-placeholder">
           <a-empty
             :description="
-              isStreaming ? '网站正在生成中，请稍候…' : '网站文件生成完成后将在此展示效果'
+              isStreaming
+                ? '网站正在生成中，请稍候…'
+                : isBuilding
+                  ? 'VUE 工程正在构建中，请稍候…'
+                  : '网站文件生成完成后将在此展示效果'
             "
           />
         </div>

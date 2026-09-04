@@ -7,12 +7,13 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import json from 'highlight.js/lib/languages/json'
 
 /**
- * 全局共享的 markdown-it 实例，支持 HTML / CSS / JavaScript 等代码高亮
+ * 全局共享的 markdown-it 实例，支持 HTML / VUE / CSS / JavaScript 等代码高亮
  */
 
-// 按需注册语言，避免打包完整的 highlight.js（HTML 使用 xml 语法）
+// 按需注册语言，避免打包完整的 highlight.js（HTML 和 VUE 使用 xml 语法）
 hljs.registerLanguage('xml', xml)
 hljs.registerLanguage('html', xml)
+hljs.registerLanguage('vue', xml)
 hljs.registerLanguage('css', css)
 hljs.registerLanguage('javascript', javascript)
 hljs.registerLanguage('typescript', typescript)

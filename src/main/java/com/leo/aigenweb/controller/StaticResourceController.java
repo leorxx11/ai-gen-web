@@ -56,6 +56,7 @@ public class StaticResourceController {
             // 返回文件资源
             Resource resource = new FileSystemResource(file);
             return ResponseEntity.ok()
+                    .lastModified(file.lastModified())
                     .header("Content-Type", getContentTypeWithCharset(filePath))
                     .body(resource);
         } catch (Exception e) {

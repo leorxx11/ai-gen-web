@@ -8,10 +8,14 @@ export const GOOD_APP_PRIORITY = 99
 // 默认应用优先级
 export const DEFAULT_APP_PRIORITY = 0
 
+// VUE 工程生成类型
+export const VUE_PROJECT_CODE_GEN_TYPE = 'vue_project'
+
 // 代码生成类型到展示文案的映射
 export const CODE_GEN_TYPE_MAP: Record<string, string> = {
   html: '原生 HTML 模式',
   multi_file: '原生多文件模式',
+  [VUE_PROJECT_CODE_GEN_TYPE]: 'VUE 工程模式',
 }
 
 // 格式化代码生成类型

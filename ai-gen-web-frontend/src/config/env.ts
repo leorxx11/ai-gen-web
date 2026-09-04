@@ -1,3 +1,5 @@
+import { VUE_PROJECT_CODE_GEN_TYPE } from '@/constants/app'
+
 /**
  * 全局环境配置：域名统一从环境变量读取（见根目录 .env 文件），部署时无需改代码
  */
@@ -12,9 +14,13 @@ export const STATIC_PREVIEW_DOMAIN =
 // 应用部署域名
 export const DEPLOY_DOMAIN = import.meta.env.VITE_DEPLOY_DOMAIN || 'http://localhost:8080'
 
-// 获取生成应用的静态资源预览地址（{codeGenType}_{appId} 目录对应一个生成的网站）
+// 获取生成应用的静态资源预览地址，VUE 工程需要访问构建后的 dist 目录
 export const getStaticPreviewUrl = (codeGenType: string, appId: string | number) => {
-  return `${STATIC_PREVIEW_DOMAIN}/${codeGenType}_${appId}/`
+  const outputDir = `${codeGenType}_${appId}`
+  if (codeGenType === VUE_PROJECT_CODE_GEN_TYPE) {
+    return `${STATIC_PREVIEW_DOMAIN}/${outputDir}/dist/index.html`
+  }
+  return `${STATIC_PREVIEW_DOMAIN}/${outputDir}/`
 }
 
 // 获取应用部署后的访问地址
