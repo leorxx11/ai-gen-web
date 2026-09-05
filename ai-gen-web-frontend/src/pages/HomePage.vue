@@ -2,7 +2,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import { ArrowUpOutlined, PaperClipOutlined, ThunderboltOutlined } from '@ant-design/icons-vue'
+import {
+  ArrowUpOutlined,
+  BulbOutlined,
+  LayoutOutlined,
+  ShopOutlined,
+  DashboardOutlined,
+  MessageOutlined,
+} from '@ant-design/icons-vue'
 import { addApp, listGoodAppVoByPage, listMyAppVoByPage } from '@/api/appController'
 import { useLoginUserStore } from '@/stores/loginUser'
 import AppListSection from '@/components/AppListSection.vue'
@@ -13,13 +20,47 @@ const loginUserStore = useLoginUserStore()
 // —— 提示词输入 ——
 const prompt = ref('')
 const creating = ref(false)
+const myLoading = ref(false)
+const goodLoading = ref(false)
+const myError = ref(false)
+const goodError = ref(false)
+
+const handlePromptKeydown = (event: KeyboardEvent) => {
+  if (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.isComposing
+  ) {
+    event.preventDefault()
+    if (!creating.value) void doCreateApp()
+  }
+}
 
 // 快捷提示词，点击后填充到输入框
 const quickPrompts = [
-  { label: '波普风电商页面', prompt: '做一个波普艺术风格的电商促销页面，包含商品展示和购买按钮' },
-  { label: '企业网站', prompt: '做一个简约现代的企业官网，包含首页、服务介绍和联系我们' },
-  { label: '电商运营后台', prompt: '做一个电商运营管理后台，包含数据看板、订单和商品管理' },
-  { label: '暗黑话题社区', prompt: '做一个暗黑风格的话题讨论社区，包含话题列表和热榜' },
+  {
+    icon: ShopOutlined,
+    label: '创意电商',
+    prompt: '做一个波普艺术风格的电商促销页面，包含商品展示和购买按钮',
+  },
+  {
+    icon: LayoutOutlined,
+    label: '企业官网',
+    prompt: '做一个简约现代的企业官网，包含首页、服务介绍和联系我们',
+  },
+  {
+    icon: DashboardOutlined,
+    label: '数据看板',
+    prompt: '做一个电商运营管理后台，包含数据看板、订单和商品管理',
+  },
+  {
+    icon: MessageOutlined,
+    label: '话题社区',
+    prompt: '做一个暗黑风格的话题讨论社区，包含话题列表和热榜',
+  },
 ]
 
 // 创建应用：跳转到对话页（不带 view 参数），由对话页自动发送初始提示词开始生成
@@ -64,12 +105,21 @@ const fetchMyApps = async () => {
   if (!loginUserStore.loginUser.id) {
     return
   }
-  const res = await listMyAppVoByPage({ ...mySearchParams })
-  if (res.data.code === 0 && res.data.data) {
-    myApps.value = res.data.data.records ?? []
-    myTotal.value = res.data.data.totalRow ?? 0
-  } else {
-    message.error('获取我的应用失败：' + res.data.message)
+  myLoading.value = true
+  myError.value = false
+  try {
+    const res = await listMyAppVoByPage({ ...mySearchParams })
+    if (res.data.code === 0 && res.data.data) {
+      myApps.value = res.data.data.records ?? []
+      myTotal.value = res.data.data.totalRow ?? 0
+    } else {
+      myError.value = true
+      message.error('获取我的应用失败：' + res.data.message)
+    }
+  } catch {
+    myError.value = true
+  } finally {
+    myLoading.value = false
   }
 }
 
@@ -83,12 +133,21 @@ const goodSearchParams = reactive<API.AppQueryRequest>({
 })
 
 const fetchGoodApps = async () => {
-  const res = await listGoodAppVoByPage({ ...goodSearchParams })
-  if (res.data.code === 0 && res.data.data) {
-    goodApps.value = res.data.data.records ?? []
-    goodTotal.value = res.data.data.totalRow ?? 0
-  } else {
-    message.error('获取精选应用失败：' + res.data.message)
+  goodLoading.value = true
+  goodError.value = false
+  try {
+    const res = await listGoodAppVoByPage({ ...goodSearchParams })
+    if (res.data.code === 0 && res.data.data) {
+      goodApps.value = res.data.data.records ?? []
+      goodTotal.value = res.data.data.totalRow ?? 0
+    } else {
+      goodError.value = true
+      message.error('获取精选应用失败：' + res.data.message)
+    }
+  } catch {
+    goodError.value = true
+  } finally {
+    goodLoading.value = false
   }
 }
 
@@ -120,54 +179,49 @@ const goToChat = (app: API.AppVO) => {
 <template>
   <div id="homePage">
     <div class="container">
-      <!-- 网站标题 -->
-      <div class="hero">
-        <h1 class="hero-title">
-          一句话
-          <img class="hero-logo" src="@/assets/logo.png" alt="Logo" />
-          呈所想
-        </h1>
-        <p class="hero-desc">与 AI 对话轻松创建应用和网站</p>
-      </div>
-
-      <!-- 用户提示词输入框 -->
-      <div class="prompt-input">
-        <a-textarea
-          v-model:value="prompt"
-          placeholder="使用 NoCode 创建一个高效的小工具，帮我计算……"
-          :auto-size="{ minRows: 4, maxRows: 8 }"
-          :maxlength="1000"
-          @keydown.enter.exact.prevent="doCreateApp"
-        />
-        <div class="prompt-toolbar">
-          <a-space>
-            <a-button shape="round" size="small" @click="message.info('功能开发中，敬请期待')">
-              <template #icon><PaperClipOutlined /></template>
-              上传
-            </a-button>
-            <a-button shape="round" size="small" @click="message.info('功能开发中，敬请期待')">
-              <template #icon><ThunderboltOutlined /></template>
-              优化
-            </a-button>
-          </a-space>
-          <a-button
-            type="primary"
-            shape="circle"
-            size="large"
-            :loading="creating"
-            @click="doCreateApp"
-          >
-            <template #icon><ArrowUpOutlined /></template>
-          </a-button>
+      <section class="creation-area" aria-labelledby="creation-title">
+        <div class="hero">
+          <span class="hero-eyebrow"><BulbOutlined /> 从一个想法开始</span>
+          <h1 id="creation-title">一句话，<span>呈所想。</span></h1>
+          <p>描述、生成、打磨，让你的网站在对话中成形。</p>
         </div>
-      </div>
-
-      <!-- 快捷提示词 -->
-      <div class="quick-prompts">
-        <a-button v-for="item in quickPrompts" :key="item.label" @click="prompt = item.prompt">
-          {{ item.label }}
-        </a-button>
-      </div>
+        <div class="prompt-input">
+          <label for="creation-prompt">你想创建什么？</label>
+          <a-textarea
+            id="creation-prompt"
+            v-model:value="prompt"
+            placeholder="描述你想做的网站，比如：一家咖啡店的官网，展示品牌故事与招牌饮品……"
+            :auto-size="{ minRows: 3, maxRows: 8 }"
+            :maxlength="1000"
+            :disabled="creating"
+            @keydown="handlePromptKeydown"
+          />
+          <div class="prompt-toolbar">
+            <span class="input-hint"
+              >Enter 发送 · Shift + Enter 换行
+              <span class="character-count">{{ prompt.length }}/1000</span></span
+            >
+            <a-button
+              type="primary"
+              size="large"
+              :loading="creating"
+              :disabled="!prompt.trim()"
+              @click="doCreateApp"
+              >开始创作 <ArrowUpOutlined
+            /></a-button>
+          </div>
+        </div>
+        <div class="quick-prompts" aria-label="试试这些创意">
+          <a-button
+            v-for="item in quickPrompts"
+            :key="item.label"
+            shape="round"
+            :disabled="creating"
+            @click="prompt = item.prompt"
+            ><component :is="item.icon" /> {{ item.label }}</a-button
+          >
+        </div>
+      </section>
 
       <!-- 我的应用分页列表 -->
       <AppListSection
@@ -176,6 +230,9 @@ const goToChat = (app: API.AppVO) => {
         title="我的作品"
         search-placeholder="搜索我的应用"
         :apps="myApps"
+        :loading="myLoading"
+        :error="myError"
+        description="继续打磨，让每个想法更进一步"
         :total="myTotal"
         :page-size="mySearchParams.pageSize"
         :empty-text="
@@ -199,6 +256,10 @@ const goToChat = (app: API.AppVO) => {
         title="精选案例"
         search-placeholder="搜索精选应用"
         :apps="goodApps"
+        featured
+        :loading="goodLoading"
+        :error="goodError"
+        description="看看其他创作者，把灵感变成了什么"
         :total="goodTotal"
         :page-size="goodSearchParams.pageSize"
         empty-text="暂无精选应用"
@@ -211,74 +272,122 @@ const goToChat = (app: API.AppVO) => {
 </template>
 
 <style scoped>
-/* 通过负 margin 抵消布局内边距，让渐变背景铺满内容区 */
 #homePage {
-  margin: -20px;
-  padding: 40px 24px 60px;
-  background: linear-gradient(180deg, #fdfdfb 0%, #e9f8f5 45%, #c2eeed 100%);
-}
-
-.container {
-  max-width: 1200px;
+  max-width: 1180px;
   margin: 0 auto;
+  padding-bottom: 44px;
 }
-
-/* —— 标题区 —— */
+.creation-area {
+  padding: 40px 0 10px;
+  background: radial-gradient(ellipse at 50% 15%, #e9f3ec 0%, transparent 66%);
+}
 .hero {
   text-align: center;
 }
-
-.hero-title {
-  display: flex;
-  gap: 16px;
+.hero-eyebrow {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin: 24px 0 0;
-  font-size: 44px;
-  font-weight: 700;
-  color: #1a1a1a;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--app-primary);
+  letter-spacing: 0.06em;
 }
-
-.hero-logo {
-  width: 56px;
-  height: 56px;
+.hero h1 {
+  margin: 16px 0 14px;
+  font-size: clamp(32px, 5vw, 52px);
+  letter-spacing: -0.06em;
+  line-height: 1.3;
+  font-weight: 650;
+  color: var(--app-text);
 }
-
-.hero-desc {
-  margin: 16px 0 0;
+.hero h1 span {
+  color: var(--app-primary);
+}
+.hero p {
+  margin: 0;
+  color: var(--app-muted);
   font-size: 16px;
-  color: #666;
 }
-
-/* —— 提示词输入框 —— */
 .prompt-input {
-  max-width: 800px;
-  margin: 32px auto 0;
-  padding: 16px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  max-width: 760px;
+  margin: 30px auto 0;
+  padding: 22px;
+  border: 1px solid var(--app-border);
+  border-radius: 20px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow);
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s;
 }
-
+.prompt-input:focus-within {
+  border-color: #80ad92;
+  box-shadow:
+    0 0 0 4px rgb(33 107 80 / 6%),
+    var(--app-shadow);
+}
+.prompt-input label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--app-muted);
+  font-size: 13px;
+}
 .prompt-input :deep(.ant-input) {
-  border: none;
+  padding: 4px 0;
+  border: 0;
   box-shadow: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1.8;
   resize: none;
 }
-
 .prompt-toolbar {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
 }
-
-/* —— 快捷提示词 —— */
+.input-hint {
+  font-size: 12px;
+  color: var(--app-muted);
+}
+.character-count {
+  margin-left: 12px;
+  font-variant-numeric: tabular-nums;
+}
 .quick-prompts {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
   justify-content: center;
-  margin-top: 24px;
+  gap: 10px;
+  margin-top: 18px;
+}
+.quick-prompts .ant-btn {
+  color: var(--app-muted);
+  background: transparent;
+}
+@media (max-width: 720px) {
+  .creation-area {
+    padding-top: 22px;
+  }
+  .prompt-input {
+    padding: 16px;
+    margin-top: 24px;
+  }
+  .prompt-toolbar {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .prompt-toolbar .ant-btn {
+    margin-left: auto;
+  }
+  .character-count {
+    display: none;
+  }
+  .hero p {
+    max-width: 280px;
+    margin: 0 auto;
+  }
 }
 </style>

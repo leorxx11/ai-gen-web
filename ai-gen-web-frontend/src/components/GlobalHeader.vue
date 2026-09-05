@@ -84,107 +84,98 @@ const doLogout = async () => {
 </script>
 
 <template>
-  <a-layout-header class="global-header">
-    <a-row :wrap="false" align="middle">
-      <!-- 左侧：Logo 和网站标题 -->
-      <a-col flex="200px">
-        <RouterLink to="/" class="header-left">
-          <img class="logo" src="@/assets/logo.png" alt="Logo" />
-          <h1 class="site-title">AI 应用生成</h1>
-        </RouterLink>
-      </a-col>
-      <!-- 中间：导航菜单 -->
-      <a-col flex="auto" class="header-menu">
-        <a-menu
-          v-model:selectedKeys="selectedKeys"
-          mode="horizontal"
-          :items="menuItems"
-          @click="handleMenuClick"
-        />
-      </a-col>
-      <!-- 右侧：用户操作区 -->
-      <a-col flex="120px" class="header-right">
-        <div v-if="loginUserStore.loginUser.id">
-          <a-dropdown>
-            <a-space class="user-info">
-              <a-avatar :src="loginUserStore.loginUser.userAvatar">
-                <template #icon><UserOutlined /></template>
-              </a-avatar>
-              {{ loginUserStore.loginUser.userName ?? '无名' }}
-            </a-space>
-            <template #overlay>
-              <a-menu>
-                <a-menu-item @click="doLogout">
-                  <LogoutOutlined />
-                  退出登录
-                </a-menu-item>
-              </a-menu>
-            </template>
-          </a-dropdown>
-        </div>
-        <div v-else>
-          <a-button type="primary" href="/user/login">登录</a-button>
-        </div>
-      </a-col>
-    </a-row>
-  </a-layout-header>
+  <header class="global-header">
+    <RouterLink to="/" class="header-left">
+      <img class="logo" src="@/assets/logo.png" alt="" />
+      <span class="site-title">AI 应用生成</span>
+    </RouterLink>
+    <nav class="header-menu" aria-label="主导航">
+      <a-menu
+        v-model:selectedKeys="selectedKeys"
+        mode="horizontal"
+        :items="menuItems"
+        @click="handleMenuClick"
+      />
+    </nav>
+    <a-dropdown v-if="loginUserStore.loginUser.id" :trigger="['click']">
+      <button class="user-info" type="button" aria-label="账号菜单">
+        <a-avatar :src="loginUserStore.loginUser.userAvatar" :size="30"
+          ><template #icon><UserOutlined /></template
+        ></a-avatar>
+        <span>{{ loginUserStore.loginUser.userName ?? '无名' }}</span>
+      </button>
+      <template #overlay
+        ><a-menu
+          ><a-menu-item @click="doLogout"><LogoutOutlined /> 退出登录</a-menu-item></a-menu
+        ></template
+      >
+    </a-dropdown>
+    <a-button v-else type="primary" @click="router.push('/user/login')">登录 / 注册</a-button>
+  </header>
 </template>
-
 <style scoped>
 .global-header {
-  height: 64px;
-  padding-inline: 20px;
-  background: #fff;
-  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 32px;
+  min-height: 68px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
 }
-
 .header-left {
   display: flex;
   align-items: center;
-  height: 64px;
+  gap: 10px;
+  flex-shrink: 0;
+  color: var(--app-text);
 }
-
 .logo {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
-
 .site-title {
-  margin: 0 0 0 12px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a1a;
-  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
 }
-
-/* min-width: 0 让菜单在窄屏下可收缩，超出的菜单项自动折叠为省略号 */
 .header-menu {
+  flex: 1;
   min-width: 0;
 }
-
 .header-menu :deep(.ant-menu-horizontal) {
-  border-bottom: none;
+  border: 0;
+  background: transparent;
+  line-height: 66px;
 }
-
-.header-right {
-  text-align: right;
-}
-
 .user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 180px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 24px;
+  background: var(--app-surface);
+  color: var(--app-text);
   cursor: pointer;
 }
-
-/* 小屏幕下隐藏网站标题，保证菜单和按钮有足够空间 */
-@media (max-width: 768px) {
+.user-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .global-header {
+    gap: 8px;
+    padding: 0 16px;
+  }
   .site-title {
     display: none;
   }
-}
-</style>
-
-<!-- 下拉菜单浮层挂载在 body 下，作用不到 scoped 样式，需用全局样式防止菜单项文字换行 -->
-<style>
-.ant-dropdown .ant-dropdown-menu-item {
-  white-space: nowrap;
+  .user-info > span:last-child {
+    display: none;
+  }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { register } from '@/api/userController'
@@ -12,6 +12,8 @@ const formState = reactive<API.UserRegisterRequest>({
   checkPassword: '',
 })
 
+const submitting = ref(false)
+
 // 提交注册表单
 const handleSubmit = async (values: API.UserRegisterRequest) => {
   // 二次校验两次输入的密码是否一致
@@ -19,75 +21,87 @@ const handleSubmit = async (values: API.UserRegisterRequest) => {
     message.error('两次输入的密码不一致')
     return
   }
-  const res = await register(values)
-  if (res.data.code === 0 && res.data.data) {
-    message.success('注册成功')
-    router.push({ path: '/user/login', replace: true })
-  } else {
-    message.error('注册失败：' + res.data.message)
+  submitting.value = true
+  try {
+    const res = await register(values)
+    if (res.data.code === 0 && res.data.data) {
+      message.success('注册成功')
+      router.push({ path: '/user/login', replace: true })
+    } else {
+      message.error('注册失败：' + res.data.message)
+    }
+  } finally {
+    submitting.value = false
   }
 }
 </script>
 
 <template>
-  <div id="userRegisterPage">
-    <h2 class="title">AI 应用生成 - 用户注册</h2>
-    <div class="desc">不写一行代码，生成完整应用</div>
-    <a-form :model="formState" autocomplete="off" @finish="handleSubmit">
-      <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
-        <a-input v-model:value="formState.userAccount" placeholder="请输入账号" />
-      </a-form-item>
-      <a-form-item
-        name="userPassword"
-        :rules="[
-          { required: true, message: '请输入密码' },
-          { min: 8, message: '密码长度不能小于 8 位' },
-        ]"
-      >
-        <a-input-password v-model:value="formState.userPassword" placeholder="请输入密码" />
-      </a-form-item>
-      <a-form-item
-        name="checkPassword"
-        :rules="[
-          { required: true, message: '请确认密码' },
-          { min: 8, message: '密码长度不能小于 8 位' },
-        ]"
-      >
-        <a-input-password v-model:value="formState.checkPassword" placeholder="请确认密码" />
-      </a-form-item>
-      <div class="tips">
-        已有账号？
-        <RouterLink to="/user/login">去登录</RouterLink>
-      </div>
-      <a-form-item>
-        <a-button type="primary" html-type="submit" style="width: 100%">注册</a-button>
-      </a-form-item>
-    </a-form>
+  <div id="userRegisterPage" class="auth-page">
+    <aside class="auth-story">
+      <span class="auth-eyebrow">AI 应用生成</span>
+      <h2>一句话，<br />呈所想。</h2>
+      <p>从灵感到网站，和 AI 一起把每一个细节打磨成形。</p>
+      <div class="auth-steps"><span>01 描述</span><span>02 生成</span><span>03 发布</span></div>
+    </aside>
+    <div class="auth-form">
+      <h1 class="title">开启你的创作</h1>
+      <p class="desc">创建账号，从第一个想法开始。</p>
+      <a-form :model="formState" layout="vertical" @finish="handleSubmit">
+        <a-form-item
+          label="账号"
+          name="userAccount"
+          :rules="[{ required: true, message: '请输入账号' }]"
+        >
+          <a-input
+            v-model:value="formState.userAccount"
+            placeholder="请输入账号"
+            autocomplete="username"
+          />
+        </a-form-item>
+        <a-form-item
+          name="userPassword"
+          label="密码"
+          :rules="[
+            { required: true, message: '请输入密码' },
+            { min: 8, message: '密码长度不能小于 8 位' },
+          ]"
+        >
+          <a-input-password
+            v-model:value="formState.userPassword"
+            placeholder="请输入密码"
+            autocomplete="new-password"
+          />
+        </a-form-item>
+        <a-form-item
+          name="checkPassword"
+          label="确认密码"
+          :rules="[
+            { required: true, message: '请确认密码' },
+            { min: 8, message: '密码长度不能小于 8 位' },
+          ]"
+        >
+          <a-input-password
+            v-model:value="formState.checkPassword"
+            placeholder="请确认密码"
+            autocomplete="new-password"
+          />
+        </a-form-item>
+        <div class="tips">
+          已有账号？
+          <RouterLink to="/user/login">去登录</RouterLink>
+        </div>
+        <a-form-item>
+          <a-button
+            type="primary"
+            size="large"
+            :loading="submitting"
+            html-type="submit"
+            style="width: 100%"
+            >注册</a-button
+          >
+        </a-form-item>
+      </a-form>
+    </div>
   </div>
 </template>
-
-<style scoped>
-#userRegisterPage {
-  max-width: 360px;
-  margin: 0 auto;
-  padding-top: 48px;
-}
-
-.title {
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.desc {
-  text-align: center;
-  color: #bbb;
-  margin-bottom: 16px;
-}
-
-.tips {
-  margin-bottom: 16px;
-  color: #bbb;
-  font-size: 13px;
-  text-align: right;
-}
-</style>

@@ -1,16 +1,22 @@
 <template>
-  <a-layout-footer class="global-footer">by Leo</a-layout-footer>
+  <footer class="global-footer">
+    <span>AI 应用生成</span><span>让想法在对话中成形 · by Leo</span>
+  </footer>
 </template>
-
 <style scoped>
-/* 版权信息始终固定在页面底部 */
 .global-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 16px;
-  text-align: center;
-  background: #efefef;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 24px 32px;
+  border-top: 1px solid var(--app-border);
+  color: var(--app-muted);
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .global-footer {
+    padding: 20px 16px;
+  }
 }
 </style>

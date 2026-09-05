@@ -1,133 +1,205 @@
 <script setup lang="ts">
-import { UserOutlined } from '@ant-design/icons-vue'
+import { ArrowUpOutlined, ExportOutlined } from '@ant-design/icons-vue'
 import { getDeployUrl } from '@/config/env'
-
-const props = defineProps<{
-  app: API.AppVO
-}>()
-
-const emit = defineEmits<{
-  click: [app: API.AppVO]
-}>()
-
-// 查看作品：新页面打开部署地址（注意区别于生成网站的预览地址）
-const viewWork = () => {
-  if (props.app.deployKey) {
-    window.open(getDeployUrl(props.app.deployKey), '_blank')
-  }
-}
+import { formatCodeGenType } from '@/constants/app'
+import { formatDateTime } from '@/utils/time'
+defineProps<{ app: API.AppVO; featured?: boolean }>()
+const emit = defineEmits<{ click: [app: API.AppVO] }>()
 </script>
 
 <template>
-  <div class="app-card" @click="emit('click', app)">
-    <!-- 封面：无封面时展示应用名首字占位图，悬浮展示操作按钮 -->
-    <div class="app-cover">
+  <article class="app-card">
+    <button
+      class="app-cover"
+      type="button"
+      :aria-label="`查看${app.appName || '未命名应用'}`"
+      @click="emit('click', app)"
+    >
       <img v-if="app.cover" :src="app.cover" :alt="app.appName" loading="lazy" />
-      <div v-else class="cover-placeholder">{{ app.appName?.charAt(0) ?? '?' }}</div>
-      <div class="cover-mask">
-        <a-space>
-          <a-button type="primary" @click.stop="emit('click', app)">查看对话</a-button>
-          <a-button v-if="app.deployKey" @click.stop="viewWork">查看作品</a-button>
-        </a-space>
+      <div v-else class="cover-placeholder">
+        <span class="cover-label">{{ formatCodeGenType(app.codeGenType) }}</span>
+        <span class="cover-letter" aria-hidden="true">{{ app.appName?.charAt(0) ?? 'A' }}</span>
+        <span class="cover-name">{{ app.appName || '未命名应用' }}</span>
       </div>
-    </div>
-    <!-- 应用信息：左侧创建者头像，右侧上应用标题、下创建者昵称 -->
+      <span class="cover-action"><ArrowUpOutlined /></span>
+    </button>
     <div class="app-info">
-      <a-avatar :src="app.user?.userAvatar" :size="40">
-        <template #icon><UserOutlined /></template>
-      </a-avatar>
+      <div class="app-title-row">
+        <h3>{{ app.appName || '未命名应用' }}</h3>
+        <span class="deploy-status" :class="{ published: app.deployKey }">{{
+          app.deployKey ? '已部署' : '未部署'
+        }}</span>
+      </div>
       <div class="app-meta">
-        <div class="app-name">{{ app.appName || '未命名应用' }}</div>
-        <div class="app-author">{{ app.user?.userName ?? '匿名用户' }}</div>
+        <span>{{ featured ? (app.user?.userName ?? '创作者') : '更新于' }}</span
+        ><time>{{ formatDateTime(app.updateTime) }}</time>
+      </div>
+      <div class="app-actions">
+        <a-button
+          v-if="!featured || !app.deployKey"
+          size="small"
+          type="text"
+          @click="emit('click', app)"
+          >{{ featured ? '查看效果' : '继续创作' }} <ArrowUpOutlined
+        /></a-button>
+        <a-button
+          v-if="app.deployKey"
+          size="small"
+          :type="featured ? 'primary' : 'text'"
+          :href="getDeployUrl(app.deployKey)"
+          target="_blank"
+          rel="noopener noreferrer"
+          >查看作品 <ExportOutlined
+        /></a-button>
+        <a-button
+          v-if="featured && app.deployKey"
+          type="text"
+          size="small"
+          @click="emit('click', app)"
+          >应用详情</a-button
+        >
       </div>
     </div>
-  </div>
+  </article>
 </template>
 
 <style scoped>
 .app-card {
+  min-width: 0;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #f0f0f0;
-  border-radius: 12px;
-  cursor: pointer;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
   transition:
-    transform 0.2s,
-    box-shadow 0.2s;
+    border-color 0.18s,
+    box-shadow 0.18s,
+    transform 0.18s;
 }
-
 .app-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: #a9c6b3;
+  box-shadow: var(--app-shadow);
+  transform: translateY(-3px);
 }
-
 .app-cover {
+  display: block;
   position: relative;
-  height: 180px;
-  background: #f5f5f5;
+  width: 100%;
+  height: 190px;
+  padding: 0;
+  border: 0;
+  background: var(--app-soft);
+  cursor: pointer;
+  text-align: left;
 }
-
 .app-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .cover-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   height: 100%;
-  font-size: 48px;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #a8edea 0%, #5ec8c3 100%);
+  position: relative;
+  padding: 22px;
+  overflow: hidden;
+  background: linear-gradient(125deg, #eaf3ed, #d6e7db);
 }
-
-/* 悬浮遮罩：hover 时淡入展示操作按钮 */
-.cover-mask {
+.cover-label {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  color: var(--app-primary);
+}
+.cover-letter {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  opacity: 0;
-  transition: opacity 0.2s;
+  right: 18px;
+  top: -30px;
+  font-size: 164px;
+  font-weight: 650;
+  line-height: 1.5;
+  color: rgb(33 107 80 / 9%);
 }
-
-.app-card:hover .cover-mask {
-  opacity: 1;
-}
-
-.app-info {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 16px;
-}
-
-/* min-width: 0 保证应用名过长时省略号生效 */
-.app-meta {
-  min-width: 0;
-  flex: 1;
-}
-
-.app-name {
-  overflow: hidden;
-  font-size: 15px;
+.cover-name {
+  position: absolute;
+  bottom: 26px;
+  left: 22px;
+  right: 24px;
+  color: var(--app-text);
+  font-size: 23px;
   font-weight: 600;
-  color: #1a1a1a;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.app-author {
-  margin-top: 4px;
+.cover-action {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--app-primary);
+  transform: rotate(45deg);
+}
+.app-info {
+  padding: 18px;
+}
+.app-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.app-title-row h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
   overflow: hidden;
-  font-size: 13px;
-  color: #999;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.deploy-status {
+  flex-shrink: 0;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+.deploy-status.published {
+  color: var(--app-primary);
+}
+.published::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.app-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--app-muted);
+  margin: 9px 0 16px;
+  overflow-wrap: anywhere;
+}
+.app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border);
+}
+.app-actions .ant-btn {
+  font-size: 13px;
+}
+@media (pointer: coarse) {
+  .app-actions .ant-btn {
+    min-height: 40px;
+  }
 }
 </style>

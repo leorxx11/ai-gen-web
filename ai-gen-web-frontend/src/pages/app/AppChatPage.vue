@@ -3,6 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'v
 import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
+  ArrowLeftOutlined,
+  DesktopOutlined,
+  MobileOutlined,
+  ReloadOutlined,
+  CodeOutlined,
   CloudUploadOutlined,
   DeleteOutlined,
   DownOutlined,
@@ -10,6 +15,7 @@ import {
   ExportOutlined,
   InfoCircleOutlined,
   LoadingOutlined,
+  LayoutOutlined,
   SendOutlined,
   UserOutlined,
 } from '@ant-design/icons-vue'
@@ -53,6 +59,35 @@ const messages = ref<ChatMessage[]>([])
 const userInput = ref('')
 const isStreaming = ref(false)
 const isBuilding = ref(false)
+const appLoading = ref(true)
+const generationError = ref('')
+const hasNewContent = ref(false)
+const activePane = ref('chat')
+const previewDevice = ref('desktop')
+const statusText = computed(() => {
+  if (appLoading.value) return '正在打开作品'
+  if (generationError.value) return generationError.value
+  if (isStreaming.value) return '正在生成网页'
+  if (isBuilding.value) return '正在准备预览'
+  return previewUrl.value ? '预览就绪' : '等待创作'
+})
+const onMessageScroll = () => {
+  const el = messageListRef.value!
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) hasNewContent.value = false
+}
+const handleInputKeydown = (event: KeyboardEvent) => {
+  if (
+    event.key === 'Enter' &&
+    !event.shiftKey &&
+    !event.ctrlKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    !event.isComposing
+  ) {
+    event.preventDefault()
+    doSend()
+  }
+}
 const messageListRef = ref<HTMLDivElement>()
 let eventSource: EventSource | null = null
 // 流式内容批量刷新的定时器
@@ -170,17 +205,25 @@ const waitForVuePreview = async (generatedAfter: number) => {
   }
   if (isBuilding.value) {
     isBuilding.value = false
-    message.error('VUE 工程构建超时，请查看后端构建日志')
+    generationError.value = '预览准备超时'
+    message.error('预览准备超时，请稍后重新打开作品')
   }
 }
 
 // 获取应用信息
 const fetchAppInfo = async () => {
-  const res = await getAppVoById({ id: appId as unknown as number })
-  if (res.data.code === 0 && res.data.data) {
-    appInfo.value = res.data.data
-  } else {
-    message.error('获取应用信息失败：' + res.data.message)
+  try {
+    const res = await getAppVoById({ id: appId as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      appInfo.value = res.data.data
+    } else {
+      generationError.value = '作品加载失败'
+      message.error('获取应用信息失败：' + res.data.message)
+    }
+  } catch {
+    generationError.value = '作品加载失败'
+  } finally {
+    appLoading.value = false
   }
 }
 
@@ -190,6 +233,7 @@ onMounted(async () => {
   if (!appInfo.value) {
     return
   }
+  if (!isOwner.value) activePane.value = 'preview'
   // 对话历史仅应用创建者和管理员可见
   if (isOwner.value || isAdmin.value) {
     await loadChatHistory()
@@ -211,6 +255,7 @@ onMounted(async () => {
 
 // 消息更新后滚动到底部
 const scrollToBottom = () => {
+  hasNewContent.value = false
   nextTick(() => {
     const el = messageListRef.value
     if (el) {
@@ -239,6 +284,7 @@ const sendMessage = (content: string) => {
   if (isStreaming.value) {
     return
   }
+  generationError.value = ''
   const generationStartedAt = Math.floor(Date.now() / 1000) * 1000
   messages.value.push({ role: 'user', content })
   // 占位的 AI 消息，收到流式内容后逐段追加
@@ -267,6 +313,8 @@ const sendMessage = (content: string) => {
     aiMessage.loading = false
     if (shouldStick) {
       scrollToBottom()
+    } else {
+      hasNewContent.value = true
     }
   }
   flushTimer = window.setInterval(flushBuffer, 150)
@@ -306,6 +354,7 @@ const sendMessage = (content: string) => {
   })
   eventSource.onerror = () => {
     finishStream()
+    generationError.value = '本次生成未完成'
     if (!aiMessage.content) {
       aiMessage.content = '抱歉，本次生成失败，请稍后重试'
       message.error('对话失败，请稍后重试')
@@ -375,36 +424,47 @@ const doDelete = () => {
   <div id="appChatPage">
     <!-- 顶部栏：左侧应用名称，右侧部署按钮 -->
     <div class="chat-header">
-      <a-dropdown>
-        <a-space class="app-title">
-          <a-avatar :src="logo" :size="28" shape="square" />
-          <span class="app-name">{{ appInfo?.appName || '未命名应用' }}</span>
-          <DownOutlined class="app-title-arrow" />
-        </a-space>
-        <template #overlay>
-          <a-menu>
-            <a-menu-item key="detail" @click="detailModalOpen = true">
-              <InfoCircleOutlined />
-              应用详情
-            </a-menu-item>
-            <template v-if="isOwner || isAdmin">
-              <a-menu-item key="edit" @click="goToEdit">
-                <EditOutlined />
-                修改应用
+      <div class="workspace-identity">
+        <RouterLink to="/" class="back-home" aria-label="返回首页"
+          ><ArrowLeftOutlined
+        /></RouterLink>
+        <a-dropdown :trigger="['click']">
+          <button type="button" class="app-title">
+            <a-avatar :src="logo" :size="28" shape="square" />
+            <span class="app-name">{{ appInfo?.appName || '未命名应用' }}</span>
+            <DownOutlined class="app-title-arrow" />
+          </button>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item key="detail" @click="detailModalOpen = true">
+                <InfoCircleOutlined />
+                应用详情
               </a-menu-item>
-              <a-menu-item key="delete" danger @click="doDelete">
-                <DeleteOutlined />
-                删除应用
-              </a-menu-item>
-            </template>
-          </a-menu>
-        </template>
-      </a-dropdown>
+              <template v-if="isOwner || isAdmin">
+                <a-menu-item key="edit" @click="goToEdit">
+                  <EditOutlined />
+                  修改应用
+                </a-menu-item>
+                <a-menu-item key="delete" danger @click="doDelete">
+                  <DeleteOutlined />
+                  删除应用
+                </a-menu-item>
+              </template>
+            </a-menu>
+          </template>
+        </a-dropdown>
+        <span
+          class="workspace-status"
+          :class="{ 'status-error': generationError, 'status-active': isStreaming || isBuilding }"
+          role="status"
+          ><span></span>{{ statusText }}</span
+        >
+      </div>
       <a-button
         v-if="isOwner"
         type="primary"
         :loading="deploying"
-        :disabled="isStreaming || isBuilding"
+        :disabled="isStreaming || isBuilding || !previewUrl"
         @click="doDeploy"
       >
         <template #icon><CloudUploadOutlined /></template>
@@ -412,11 +472,24 @@ const doDelete = () => {
       </a-button>
     </div>
 
-    <!-- 核心内容区：左侧对话，右侧网页展示 -->
-    <div class="chat-body">
+    <div class="mobile-workspace-switch">
+      <a-radio-group v-model:value="activePane" button-style="solid" aria-label="工作区"
+        ><a-radio-button value="chat">对话</a-radio-button
+        ><a-radio-button value="preview">预览</a-radio-button></a-radio-group
+      >
+    </div>
+    <div class="chat-body" :class="`active-${activePane}`">
       <!-- 对话区域 -->
       <div class="chat-panel">
-        <div ref="messageListRef" class="message-list">
+        <div class="panel-heading">
+          <CodeOutlined /> 创作对话 <span>{{ isOwner ? '与 AI 一起打磨作品' : '作品预览' }}</span>
+        </div>
+        <div ref="messageListRef" class="message-list" @scroll="onMessageScroll">
+          <a-skeleton
+            v-if="appLoading || (historyLoading && messages.length === 0)"
+            active
+            :paragraph="{ rows: 5 }"
+          />
           <!-- 加载更多历史消息 -->
           <div v-if="hasMoreHistory" class="load-more">
             <a-button type="link" size="small" :loading="historyLoading" @click="loadMoreHistory">
@@ -424,8 +497,8 @@ const doDelete = () => {
             </a-button>
           </div>
           <a-empty
-            v-if="messages.length === 0"
-            description="暂无对话，快来和 AI 一起创作吧"
+            v-if="!appLoading && !historyLoading && messages.length === 0"
+            :description="isOwner ? '写下你的想法，开始第一次创作' : '在预览中查看这个作品'"
             class="message-empty"
           />
           <div
@@ -455,7 +528,14 @@ const doDelete = () => {
             </a-avatar>
           </div>
         </div>
-        <!-- 用户消息输入框：非本人作品禁用并悬浮提示 -->
+        <a-button
+          v-if="hasNewContent"
+          class="new-content-button"
+          shape="round"
+          @click="scrollToBottom"
+          ><DownOutlined /> 有新内容</a-button
+        >
+        <!-- 用户消息输入框 -->
         <a-tooltip :title="inputTooltip" placement="topLeft">
           <div class="input-area">
             <a-textarea
@@ -464,12 +544,14 @@ const doDelete = () => {
               :auto-size="{ minRows: 2, maxRows: 5 }"
               :disabled="inputDisabled"
               :maxlength="1000"
-              @keydown.enter.exact.prevent="doSend"
+              aria-label="描述你想调整的内容"
+              @keydown="handleInputKeydown"
             />
             <a-button
               type="primary"
               shape="circle"
               class="send-btn"
+              aria-label="发送消息"
               :disabled="inputDisabled || !userInput.trim()"
               @click="doSend"
             >
@@ -477,28 +559,76 @@ const doDelete = () => {
             </a-button>
           </div>
         </a-tooltip>
+        <div class="composer-hint">
+          <span>{{
+            isOwner ? 'Enter 发送 · Shift + Enter 换行' : '仅创建者可以继续编辑此作品'
+          }}</span
+          ><span>{{ userInput.length }}/1000</span>
+        </div>
       </div>
 
       <!-- 网页展示区域 -->
       <div class="preview-panel">
         <div class="preview-header">
-          <span>生成后的网页展示</span>
-          <a v-if="previewUrl" :href="previewUrl" target="_blank">
-            在新窗口打开
-            <ExportOutlined />
-          </a>
+          <span class="preview-title">网页预览</span>
+          <div class="preview-tools">
+            <a-radio-group v-model:value="previewDevice" size="small" aria-label="预览尺寸"
+              ><a-radio-button value="desktop" aria-label="桌面预览"
+                ><DesktopOutlined /></a-radio-button
+              ><a-radio-button value="mobile" aria-label="手机预览"
+                ><MobileOutlined /></a-radio-button
+            ></a-radio-group>
+            <a-button
+              type="text"
+              size="small"
+              :disabled="!previewUrl"
+              aria-label="刷新预览"
+              @click="updatePreview"
+              ><ReloadOutlined
+            /></a-button>
+            <a-button
+              v-if="previewUrl"
+              type="text"
+              size="small"
+              :href="previewUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="在新窗口打开预览"
+              ><ExportOutlined
+            /></a-button>
+          </div>
         </div>
-        <iframe v-if="previewUrl" :src="previewUrl" class="preview-frame" title="网站预览"></iframe>
-        <div v-else class="preview-placeholder">
-          <a-empty
-            :description="
-              isStreaming
-                ? '网站正在生成中，请稍候…'
-                : isBuilding
-                  ? 'VUE 工程正在构建中，请稍候…'
-                  : '网站文件生成完成后将在此展示效果'
-            "
-          />
+        <div
+          v-if="isStreaming || isBuilding || generationError"
+          class="preview-status"
+          :class="{ 'status-error': generationError }"
+          role="status"
+        >
+          <LoadingOutlined v-if="isStreaming || isBuilding" /> {{ statusText
+          }}<span v-if="previewUrl && (isStreaming || isBuilding)"> · 当前显示上一版</span>
+        </div>
+        <div class="preview-stage" :class="{ 'mobile-preview': previewDevice === 'mobile' }">
+          <iframe
+            v-if="previewUrl"
+            :src="previewUrl"
+            class="preview-frame"
+            title="网站预览"
+          ></iframe>
+          <div v-else class="preview-placeholder">
+            <div class="preview-empty-icon">
+              <LoadingOutlined v-if="appLoading || isStreaming || isBuilding" /><LayoutOutlined
+                v-else
+              />
+            </div>
+            <h2>{{ statusText }}</h2>
+            <p>
+              {{
+                generationError
+                  ? '可以继续描述需求，或稍后重新打开作品'
+                  : '你的想法，即将在这里呈现'
+              }}
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -518,150 +648,334 @@ const doDelete = () => {
 </template>
 
 <style scoped>
-/* 视口高度减去顶部导航 64px、内容区上下内边距 40px、底部页脚 56px */
 #appChatPage {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 160px);
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  background: var(--app-bg);
 }
-
-/* —— 顶部栏 —— */
 .chat-header {
+  flex-shrink: 0;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 12px 24px;
+  gap: 12px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
 }
-
+.workspace-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.back-home {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  color: var(--app-muted);
+}
 .app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+  padding: 4px;
+  background: transparent;
+  color: var(--app-text);
   cursor: pointer;
 }
-
 .app-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a1a;
 }
-
 .app-title-arrow {
+  font-size: 11px;
+  color: var(--app-muted);
+}
+.workspace-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-muted);
   font-size: 12px;
-  color: #999;
+  white-space: nowrap;
 }
-
-/* —— 核心内容区 —— */
-/* min-height: 0 保证子元素可以在 flex 布局中正常滚动 */
+.workspace-status > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-active {
+  color: var(--app-primary);
+}
+.status-error {
+  color: #b34436 !important;
+}
+.mobile-workspace-switch {
+  display: none;
+}
 .chat-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(320px, 36%) minmax(0, 1fr);
   flex: 1;
-  gap: 16px;
   min-height: 0;
-  padding-top: 16px;
 }
-
 .chat-panel {
+  position: relative;
   display: flex;
-  flex: 4;
   flex-direction: column;
-  min-width: 320px;
+  min-height: 0;
+  min-width: 0;
+  border-right: 1px solid var(--app-border);
+  background: var(--app-surface);
+  padding: 0 20px 16px;
 }
-
+.panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 18px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--app-border);
+}
+.panel-heading > span:last-child {
+  margin-left: auto;
+  color: var(--app-muted);
+  font-size: 12px;
+}
 .message-list {
   flex: 1;
-  padding-right: 8px;
+  min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
+  padding: 22px 2px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #ccd9cf transparent;
 }
-
 .load-more {
-  margin-bottom: 8px;
   text-align: center;
-}
-
-.message-empty {
-  margin-top: 80px;
-}
-
-.message-item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
   margin-bottom: 16px;
 }
-
-/* 用户消息靠右展示 */
+.message-empty {
+  margin: 60px 0;
+}
+.message-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 24px;
+}
 .message-user {
   justify-content: flex-end;
 }
-
 .message-avatar {
   flex-shrink: 0;
 }
-
 .message-content {
-  max-width: 80%;
-  padding: 10px 14px;
+  min-width: 0;
+  flex: 1;
   font-size: 14px;
-  line-height: 1.7;
-  word-break: break-word;
-  background: #fff;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
 }
-
 .message-user .message-content {
+  flex: initial;
+  max-width: 85%;
+  padding: 12px 15px;
+  background: var(--app-soft);
+  border-radius: 14px 14px 3px 14px;
   white-space: pre-wrap;
-  background: #e6f4ff;
-  border-color: #bae0ff;
 }
-
-/* —— 输入框 —— */
+.message-user .message-avatar {
+  display: none;
+}
+.message-ai .message-avatar {
+  width: 25px !important;
+  height: 25px !important;
+  margin-top: 3px;
+}
 .input-area {
   position: relative;
-  margin-top: 12px;
+  padding: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  transition:
+    border-color 0.18s,
+    box-shadow 0.18s;
 }
-
+.input-area:focus-within {
+  border-color: #80ad92;
+  box-shadow: 0 0 0 3px rgb(33 107 80 / 6%);
+}
 .input-area :deep(.ant-input) {
-  padding-right: 52px;
-  border-radius: 12px;
+  padding: 2px 38px 8px 2px;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  resize: none;
 }
-
 .send-btn {
   position: absolute;
   right: 10px;
   bottom: 10px;
 }
-
-/* —— 网页展示区域 —— */
+.composer-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--app-muted);
+}
+.new-content-button {
+  flex-shrink: 0;
+  align-self: center;
+  margin: 4px 0;
+  color: var(--app-primary);
+}
 .preview-panel {
   display: flex;
-  flex: 6;
   flex-direction: column;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid #f0f0f0;
-  border-radius: 8px;
+  min-height: 0;
+  min-width: 0;
+  padding: 0 20px 20px;
 }
-
 .preview-header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
-  font-weight: 500;
-  background: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 12px;
+  min-height: 59px;
 }
-
-.preview-frame {
+.preview-title {
+  font-size: 14px;
+  color: var(--app-muted);
+}
+.preview-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-status {
+  padding: 0 0 12px;
+  font-size: 13px;
+  color: var(--app-primary);
+}
+.preview-stage {
+  display: flex;
   flex: 1;
-  width: 100%;
-  border: none;
+  min-height: 0;
+  justify-content: center;
 }
-
+.preview-frame {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  background: #fff;
+}
+.mobile-preview .preview-frame {
+  width: min(390px, 100%);
+}
 .preview-placeholder {
   display: flex;
   flex: 1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 24px;
+  text-align: center;
+  border: 1px dashed #cbd9cf;
+  border-radius: 16px;
+}
+.preview-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--app-soft);
+  color: var(--app-primary);
+  font-size: 24px;
+}
+.preview-placeholder h2 {
+  margin: 20px 0 6px;
+  font-size: 18px;
+  font-weight: 500;
+}
+.preview-placeholder p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 14px;
+}
+@media (max-width: 800px) {
+  .chat-header {
+    padding: 10px 14px;
+  }
+  .workspace-identity {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .workspace-status {
+    display: none;
+  }
+  .app-name {
+    max-width: min(40vw, 200px);
+  }
+  .app-title .ant-avatar {
+    display: none;
+  }
+  .mobile-workspace-switch {
+    display: block;
+    padding: 10px 14px;
+    background: var(--app-surface);
+    border-bottom: 1px solid var(--app-border);
+  }
+  .mobile-workspace-switch :deep(.ant-radio-group) {
+    display: flex;
+  }
+  .mobile-workspace-switch :deep(.ant-radio-button-wrapper) {
+    flex: 1;
+    text-align: center;
+  }
+  .chat-body {
+    display: flex;
+  }
+  .chat-panel,
+  .preview-panel {
+    flex: 1;
+    width: 100%;
+  }
+  .active-chat .preview-panel,
+  .active-preview .chat-panel {
+    display: none;
+  }
+  .chat-panel {
+    border: 0;
+    padding: 0 16px 12px;
+  }
+  .preview-panel {
+    padding: 0 12px 12px;
+  }
+  .composer-hint {
+    font-size: 12px;
+  }
 }
 </style>

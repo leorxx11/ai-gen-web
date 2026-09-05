@@ -130,6 +130,9 @@ const doSubmit = async () => {
 .edit-card {
   width: 100%;
   max-width: 680px;
+  border-color: var(--app-border);
+  border-radius: 20px;
+  box-shadow: var(--app-shadow);
 }
 
 .cover-preview {

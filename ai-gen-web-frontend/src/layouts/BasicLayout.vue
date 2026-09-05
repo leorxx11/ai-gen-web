@@ -1,31 +1,44 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { computed } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
 import GlobalHeader from '@/components/GlobalHeader.vue'
 import GlobalFooter from '@/components/GlobalFooter.vue'
+const route = useRoute()
+const isWorkspace = computed(() => route.path.startsWith('/app/chat/'))
 </script>
 
 <template>
-  <a-layout class="basic-layout">
-    <!-- 上：全局导航栏 -->
-    <GlobalHeader />
-    <!-- 中：内容区域，根据路由切换页面 -->
+  <a-layout class="basic-layout" :class="{ 'workspace-layout': isWorkspace }">
+    <GlobalHeader v-if="!isWorkspace" />
     <a-layout-content class="content">
-      <RouterView />
+      <RouterView :key="route.path" />
     </a-layout-content>
-    <!-- 下：全局底部版权信息 -->
-    <GlobalFooter />
+    <GlobalFooter v-if="!isWorkspace" />
   </a-layout>
 </template>
 
 <style scoped>
 .basic-layout {
-  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--app-bg);
 }
-
 .content {
-  padding: 20px;
-  /* 底部留出空间，避免内容被固定在底部的 footer 遮挡 */
-  margin-bottom: 56px;
-  background: linear-gradient(to right, #fefefe, #fff);
+  width: 100%;
+  padding: 24px 32px;
+}
+.workspace-layout {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.workspace-layout .content {
+  padding: 0;
+  min-height: 0;
+  display: flex;
+}
+@media (max-width: 720px) {
+  .content {
+    padding: 16px;
+  }
 }
 </style>

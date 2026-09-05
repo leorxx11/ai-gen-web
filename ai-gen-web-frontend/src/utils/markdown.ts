@@ -47,3 +47,14 @@ md.set({
     return `<pre class="hljs"><code>${md.utils.escapeHtml(code)}</code></pre>`
   },
 })
+
+// 代码作为可展开的内容呈现，流式生成时保持展开。
+for (const parser of [md, mdPlain]) {
+  for (const rule of ['fence', 'code_block']) {
+    const renderCode = parser.renderer.rules[rule]!
+    parser.renderer.rules[rule] = (tokens, index, options, env, self) => {
+      const language = parser.utils.escapeHtml(tokens[index]!.info.trim().split(/\s+/)[0] || 'code')
+      return `<details class="code-block"${parser === mdPlain ? ' open' : ''}><summary><span>${language}</span><span class="code-disclosure">展开 / 收起</span></summary><div class="code-toolbar"><button type="button" data-copy-code${parser === mdPlain ? ' disabled' : ''}>复制代码</button></div>${renderCode(tokens, index, options, env, self)}</details>`
+    }
+  }
+}
