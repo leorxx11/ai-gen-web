@@ -1,0 +1,196 @@
+name: e2e
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REPORT_ROOT: /srv/allure-reports/ai-gen-web
+  REPORT_BASE_URL: https://ci.leorxx.xyz/reports/ai-gen-web
+  KEEP_REPORTS: "20"
+  # 用例仓库：黑盒测试与 mock 大模型都在这里
+  QA_REPO: leorxx11/qa-automation-platform
+  # AIGEN_DB_PASSWORD 由 runner 目录下的 .env 注入，不在仓库中出现
+  AIGEN_DB_USER: aigen_ci
+  AIGEN_API_BASE_URL: http://localhost:8123/api
+  AIGEN_WEB_BASE_URL: http://localhost:4173
+  AIGEN_MOCK_LLM_URL: http://127.0.0.1:18080
+
+jobs:
+  e2e:
+    # 公开仓库 + self-hosted runner：来自 fork 的 PR 一律不在本机执行
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, ARM64]
+    timeout-minutes: 40
+
+    steps:
+      - name: 清理上次运行留下的文件
+        run: rm -rf run logs allure-results allure-report
+
+      - uses: actions/checkout@v4
+        with:
+          path: app
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.QA_REPO }}
+          path: qa
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: app/pom.xml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/ai-gen-web-frontend/package-lock.json
+
+      - name: 构建后端
+        working-directory: app
+        run: sh mvnw -B -q -DskipTests package
+
+      - name: 构建前端
+        working-directory: app/ai-gen-web-frontend
+        env:
+          VITE_API_BASE_URL: ${{ env.AIGEN_API_BASE_URL }}
+          VITE_STATIC_PREVIEW_DOMAIN: ${{ env.AIGEN_API_BASE_URL }}/static
+        run: |
+          npm ci --no-audit --no-fund
+          npx vite build
+
+      - name: 安装测试依赖
+        working-directory: qa
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q --upgrade pip
+          .venv/bin/pip install -q -r requirements.txt
+          .venv/bin/python -m playwright install chromium
+
+      - name: 重置测试数据库与 Redis
+        run: qa/.venv/bin/python qa/scripts/ai_gen_web/reset_env.py app/sql/create_table.sql
+
+      - name: 启动 mock 大模型、后端、前端
+        run: |
+          mkdir -p run logs
+          qa/.venv/bin/python qa/mock_llm/server.py --port 18080 > logs/mock-llm.log 2>&1 &
+          echo $! > run/mock.pid
+
+          # 后端在 run/ 下启动，生成的代码写到 run/tmp/
+          (cd run && SPRING_DATASOURCE_USERNAME="$AIGEN_DB_USER" \
+            SPRING_DATASOURCE_PASSWORD="$AIGEN_DB_PASSWORD" \
+            exec java -jar ../app/target/ai-gen-web-0.0.1-SNAPSHOT.jar \
+              --spring.profiles.active=ci \
+              --spring.datasource.url=jdbc:mysql://127.0.0.1:3306/ai_gen_web \
+              --langchain4j.open-ai.chat-model.base-url=$AIGEN_MOCK_LLM_URL/v1 \
+              --langchain4j.open-ai.chat-model.api-key=mock \
+              --langchain4j.open-ai.chat-model.model-name=mock \
+              --langchain4j.open-ai.streaming-chat-model.base-url=$AIGEN_MOCK_LLM_URL/v1 \
+              --langchain4j.open-ai.streaming-chat-model.api-key=mock \
+              --langchain4j.open-ai.streaming-chat-model.model-name=mock \
+              > ../logs/backend.log 2>&1) &
+          echo $! > run/backend.pid
+
+          (cd app/ai-gen-web-frontend && exec npx vite preview --port 4173 --strictPort > ../../logs/frontend.log 2>&1) &
+          echo $! > run/frontend.pid
+
+          for i in $(seq 90); do
+            curl -sf "$AIGEN_API_BASE_URL/health/" >/dev/null \
+              && curl -sf "$AIGEN_WEB_BASE_URL/" >/dev/null \
+              && curl -sf "$AIGEN_MOCK_LLM_URL/health" >/dev/null \
+              && { echo "all services up after ${i}s"; exit 0; }
+            sleep 1
+          done
+          echo "services did not start in time"; tail -50 logs/*.log; exit 1
+
+      - name: 运行测试
+        id: tests
+        continue-on-error: true
+        working-directory: qa
+        run: .venv/bin/pytest tests/ai_gen_web --alluredir=../allure-results
+
+      - name: 停止服务
+        if: always()
+        run: |
+          for f in run/*.pid; do [ -f "$f" ] && kill "$(cat "$f")" 2>/dev/null || true; done
+
+      - name: 上传服务日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-logs
+          path: logs/
+          retention-days: 7
+
+      - name: 生成 Allure 报告
+        if: always()
+        env:
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ -d "$REPORT_ROOT/latest/history" ]; then
+            cp -r "$REPORT_ROOT/latest/history" allure-results/history
+          fi
+
+          cat > allure-results/environment.properties <<EOF
+          Java=$(java -version 2>&1 | head -1 | cut -d'"' -f2)
+          Node=$(node --version)
+          Python=$(qa/.venv/bin/python --version | cut -d' ' -f2)
+          LLM=mock (qa-automation-platform/mock_llm)
+          Runner=${{ runner.name }} (${{ runner.os }}/${{ runner.arch }})
+          Branch=${{ github.ref_name }}
+          Commit=${GITHUB_SHA::7}
+          QA_Commit=$(git -C qa rev-parse --short HEAD)
+          EOF
+
+          cat > allure-results/executor.json <<EOF
+          {
+            "name": "GitHub Actions",
+            "type": "github",
+            "url": "${{ github.server_url }}/${{ github.repository }}",
+            "buildOrder": ${{ github.run_number }},
+            "buildName": "${{ github.workflow }} #${{ github.run_number }}",
+            "buildUrl": "${{ github.server_url }}/${{ github.repository }}/actions/runs/$RUN_ID",
+            "reportUrl": "$REPORT_BASE_URL/$RUN_ID/",
+            "reportName": "${{ github.repository }}"
+          }
+          EOF
+
+          allure generate allure-results -o allure-report --clean
+
+      - name: 发布报告
+        if: always()
+        run: publish-allure-report allure-report "${{ github.run_id }}"
+
+      - name: 输出报告链接
+        if: always()
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import json, os
+          s = json.load(open("allure-report/widgets/summary.json"))
+          st, t = s["statistic"], s["time"]
+          url = f'{os.environ["REPORT_BASE_URL"]}/{os.environ["GITHUB_RUN_ID"]}/'
+          print("## 🧪 ai-gen-web 端到端测试\n")
+          print("| 总数 | ✅ 通过 | ❌ 失败 | 💥 异常 | ⏭ 跳过 | 耗时 |")
+          print("|---|---|---|---|---|---|")
+          print(f'| {st["total"]} | {st["passed"]} | {st["failed"]} | {st["broken"]} | {st["skipped"]} | {t["duration"] / 1000:.1f}s |')
+          print(f"\n📊 **[查看 Allure 报告]({url})**　·　[最新报告]({os.environ['REPORT_BASE_URL']}/latest/)")
+          print("\n> 已知缺陷以 xfail 标记，计入「跳过」；报告站启用了 basic auth")
+          EOF
+
+      - name: 测试失败时标记任务失败
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
