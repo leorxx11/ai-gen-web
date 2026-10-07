@@ -16,15 +16,15 @@ public class WorkflowSettings {
     }
 
     /**
-     * 是否启用图片收集步骤，默认关闭
+     * 是否启用图片收集步骤，默认开启
      */
     public static boolean isImageCollectionEnabled() {
         try {
             return SpringContextUtil.getBean(Environment.class)
-                    .getProperty(IMAGE_COLLECTION_ENABLED, Boolean.class, false);
+                    .getProperty(IMAGE_COLLECTION_ENABLED, Boolean.class, true);
         } catch (Exception e) {
-            log.warn("读取工作流配置失败，按默认值处理（图片收集关闭）: {}", e.getMessage());
-            return false;
+            log.warn("读取工作流配置失败，按默认值处理（图片收集开启）: {}", e.getMessage());
+            return true;
         }
     }
 }

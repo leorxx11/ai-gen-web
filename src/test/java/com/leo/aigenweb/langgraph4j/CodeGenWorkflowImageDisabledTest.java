@@ -30,9 +30,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 图片收集关闭时（默认）：工作流不应包含图片收集节点，也不应调用图片规划 AI 和任何图片工具
+ * 图片收集关闭时（workflow.image-collection.enabled=false）：工作流不应包含图片收集节点，也不应调用图片规划 AI 和任何图片工具
  */
-@SpringBootTest
+@SpringBootTest(properties = "workflow.image-collection.enabled=false")
 class CodeGenWorkflowImageDisabledTest {
 
     @MockitoBean

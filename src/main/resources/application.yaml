@@ -54,8 +54,9 @@ darkroom:
 workflow:
   image-collection:
     # 是否在代码生成工作流中加入“图片收集”步骤（AI 规划图片 + 并发收集素材 + 拼进提示词）。
-    # 默认关闭：内容图片来源（Pexels、Pixabay 等）目前都无法申请 API Key，开启前请先确认至少有一个可用的图片来源。
-    enabled: false
+    # 默认开启。内容图片来源为 Pixabay（需配置 PIXABAY_API_KEY，未配置时该工具会自动跳过）；
+    # 如不需要图片收集，可设为 false 关闭。
+    enabled: true
 
 # 以下为图片收集所用的外部服务，仅在 workflow.image-collection.enabled=true 时才会用到。
 # 密钥通过环境变量注入；未配置（为空）时对应工具会直接跳过，不会发出请求。

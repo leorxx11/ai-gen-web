@@ -16,10 +16,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * 工作流端到端测试（默认配置，不含图片收集）：真实调用 LLM。图床上传用 mock 替代，避免测试产生垃圾图片。
+ * 工作流端到端测试（关闭图片收集）：真实调用 LLM。图床上传用 mock 替代，避免测试产生垃圾图片。
  */
 @Slf4j
-@SpringBootTest
+@SpringBootTest(properties = "workflow.image-collection.enabled=false")
 class CodeGenWorkflowTest {
 
     @MockitoBean
