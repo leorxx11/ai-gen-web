@@ -1,5 +1,6 @@
 package com.leo.aigenweb.service;
 
+import com.leo.aigenweb.model.dto.app.AppAddRequest;
 import com.leo.aigenweb.model.dto.app.AppQueryRequest;
 import com.leo.aigenweb.model.entity.User;
 import com.leo.aigenweb.model.vo.AppVO;
@@ -59,4 +60,13 @@ public interface AppService extends IService<App> {
      * @return 部署地址
      */
     String deployApp(Long appId, User loginUser);
+
+    /**
+     * 创建应用，并由 AI 智能选择代码生成类型
+     *
+     * @param appAddRequest 创建请求
+     * @param loginUser     当前登录用户
+     * @return 应用 id
+     */
+    Long createApp(AppAddRequest appAddRequest, User loginUser);
 }

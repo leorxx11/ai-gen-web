@@ -23,7 +23,7 @@ import {
 import { deleteApp, deleteAppByAdmin, deployApp, getAppVoById } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
-import { VUE_PROJECT_CODE_GEN_TYPE } from '@/constants/app'
+import { VUE_PROJECT_CODE_GEN_TYPE, formatCodeGenType } from '@/constants/app'
 import { useLoginUserStore } from '@/stores/loginUser'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
@@ -490,6 +490,9 @@ const doDelete = () => {
             </a-menu>
           </template>
         </a-dropdown>
+        <a-tag v-if="appInfo?.codeGenType" color="blue" class="code-gen-type-tag">
+          {{ formatCodeGenType(appInfo.codeGenType) }}
+        </a-tag>
         <span
           class="workspace-status"
           :class="{ 'status-error': generationError, 'status-active': isStreaming || isBuilding }"
@@ -752,6 +755,11 @@ const doDelete = () => {
   font-size: 11px;
   color: var(--app-muted);
 }
+.code-gen-type-tag {
+  margin-inline-end: 0;
+  font-size: 12px;
+}
+
 .workspace-status {
   display: flex;
   align-items: center;
