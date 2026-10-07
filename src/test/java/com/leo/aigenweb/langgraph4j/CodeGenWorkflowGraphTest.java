@@ -40,9 +40,9 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 工作流整体测试：用 mock 替换 AI 服务和外部图片工具，验证图的连线、条件边、质检循环和并发分支
+ * 工作流整体测试（开启图片收集）：用 mock 替换 AI 服务和外部图片工具，验证图的连线、条件边、质检循环和并发分支
  */
-@SpringBootTest
+@SpringBootTest(properties = "workflow.image-collection.enabled=true")
 class CodeGenWorkflowGraphTest {
 
     @MockitoBean

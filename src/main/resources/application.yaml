@@ -50,11 +50,19 @@ darkroom:
   base-url: https://leorxx.xyz
   token: ${DARKROOM_TOKEN:proxy-injected}
 
-# 工作流图片收集所用的外部服务（密钥通过环境变量注入；云端可用网络代理注入，这里用占位符即可）
+# 工作流
+workflow:
+  image-collection:
+    # 是否在代码生成工作流中加入“图片收集”步骤（AI 规划图片 + 并发收集素材 + 拼进提示词）。
+    # 默认关闭：内容图片来源（Pexels、Pixabay 等）目前都无法申请 API Key，开启前请先确认至少有一个可用的图片来源。
+    enabled: false
+
+# 以下为图片收集所用的外部服务，仅在 workflow.image-collection.enabled=true 时才会用到。
+# 密钥通过环境变量注入；未配置（为空）时对应工具会直接跳过，不会发出请求。
 # Pexels 内容图片搜索
 pexels:
-  api-key: ${PEXELS_API_KEY:proxy-injected}
+  api-key: ${PEXELS_API_KEY:}
 # 阿里云百炼 DashScope（Logo 文生图）
 dashscope:
-  api-key: ${DASHSCOPE_API_KEY:proxy-injected}
+  api-key: ${DASHSCOPE_API_KEY:}
   image-model: wan2.2-t2i-flash

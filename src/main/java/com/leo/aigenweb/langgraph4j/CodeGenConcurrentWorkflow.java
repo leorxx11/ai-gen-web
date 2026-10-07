@@ -42,6 +42,10 @@ public class CodeGenConcurrentWorkflow extends AbstractCodeGenWorkflow {
 
     @Override
     public CompiledGraph<MessagesState<String>> createWorkflow() {
+        // 关闭图片收集时没有可并发的分支，直接使用不含图片收集的串行流程
+        if (!WorkflowSettings.isImageCollectionEnabled()) {
+            return new CodeGenWorkflow().createWorkflow();
+        }
         try {
             return compile(new MessagesStateGraph<String>()
                     .addNode(IMAGE_PLAN, ImagePlanNode.create())
