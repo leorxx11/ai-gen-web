@@ -46,27 +46,29 @@ fi
 # --- Redis ---
 redis-cli ping >/dev/null 2>&1 || redis-server --daemonize yes >/dev/null
 
-# --- LLM config: application-local.yaml is gitignored, so generate it from a secret ---
-# Set DEEPSEEK_API_KEY in the cloud environment's secrets (optionally LLM_BASE_URL / LLM_MODEL_NAME).
+# --- LLM config: application-local.yaml is gitignored, so generate it here ---
+# Preferred: add a Network secret (Bearer, allowed site api.deepseek.com) in the cloud
+# environment settings. The proxy injects the real Authorization header, so the app only
+# needs a placeholder key. If DEEPSEEK_API_KEY is set as a plain env var, it is used instead.
+# Optional overrides: LLM_BASE_URL / LLM_MODEL_NAME.
 LOCAL_CFG=src/main/resources/application-local.yaml
-if [ -n "${DEEPSEEK_API_KEY:-}" ] && [ ! -f "$LOCAL_CFG" ]; then
+if [ ! -f "$LOCAL_CFG" ]; then
   LLM_URL="${LLM_BASE_URL:-https://api.deepseek.com/v1}"
   LLM_MODEL="${LLM_MODEL_NAME:-deepseek-v4-flash}"
+  LLM_KEY="${DEEPSEEK_API_KEY:-proxy-injected}"
   cat > "$LOCAL_CFG" <<CFG
 langchain4j:
   open-ai:
     chat-model:
       base-url: ${LLM_URL}
-      api-key: ${DEEPSEEK_API_KEY}
+      api-key: ${LLM_KEY}
       model-name: ${LLM_MODEL}
     streaming-chat-model:
       base-url: ${LLM_URL}
-      api-key: ${DEEPSEEK_API_KEY}
+      api-key: ${LLM_KEY}
       model-name: ${LLM_MODEL}
 CFG
   chmod 600 "$LOCAL_CFG"
-elif [ -z "${DEEPSEEK_API_KEY:-}" ] && [ ! -f "$LOCAL_CFG" ]; then
-  echo "NOTE: DEEPSEEK_API_KEY not set; skipping application-local.yaml (use run-backend-mock.sh for a mock LLM)." >&2
 fi
 
 # --- Helper for starting the backend without an application-local.yaml / real LLM key ---
