@@ -44,7 +44,7 @@ if [ -z "$($MYSQL -N -e "SHOW TABLES FROM ${DB_NAME}")" ]; then
 fi
 
 # --- Redis ---
-redis-cli ping >/dev/null 2>&1 || redis-server --daemonize yes >/dev/null
+redis-cli ping >/dev/null 2>&1 || redis-server --daemonize yes --dir /tmp --save "" >/dev/null
 
 # --- LLM config: application-local.yaml is gitignored, so generate it here ---
 # Preferred: add a Network secret (Bearer, allowed site api.deepseek.com) in the cloud
