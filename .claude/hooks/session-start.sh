@@ -99,6 +99,13 @@ if [ -x "$CHROME_BIN" ]; then
   fi
 fi
 
+# --- Mermaid CLI (workflow architecture-diagram tool) ---
+# Skip puppeteer's own Chromium download; the app points it at the installed Chromium via SCREENSHOT_CHROME_BINARY.
+if ! command -v mmdc >/dev/null 2>&1; then
+  PUPPETEER_SKIP_DOWNLOAD=1 npm install -g --no-audit --no-fund @mermaid-js/mermaid-cli \
+    || echo "NOTE: could not install mermaid-cli; diagram rendering tests will be skipped." >&2
+fi
+
 # --- Helper for starting the backend without an application-local.yaml / real LLM key ---
 cat > .claude/hooks/run-backend-mock.sh <<'RUN'
 #!/bin/bash
