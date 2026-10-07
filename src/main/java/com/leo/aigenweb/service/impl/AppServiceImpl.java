@@ -21,6 +21,7 @@ import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 import com.leo.aigenweb.model.vo.AppVO;
 import com.leo.aigenweb.model.vo.UserVO;
 import com.leo.aigenweb.service.ChatHistoryService;
+import com.leo.aigenweb.service.ScreenshotService;
 import com.leo.aigenweb.service.UserService;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -50,6 +51,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
 
     @Resource
     private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+
+    @Resource
+    private ScreenshotService screenshotService;
+
+    @Override
+    public void generateAppScreenshotAsync(Long appId, String appUrl) {
+        // 截图较耗时，使用虚拟线程异步执行，避免阻塞部署流程
+        Thread.startVirtualThread(() -> {
+            try {
+                String screenshotUrl = screenshotService.generateAndUploadScreenshot(appUrl);
+                App updateApp = new App();
+                updateApp.setId(appId);
+                updateApp.setCover(screenshotUrl);
+                boolean updated = this.updateById(updateApp);
+                ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "更新应用封面字段失败");
+            } catch (Exception e) {
+                // 封面失败不影响应用本身，前端会降级显示默认封面
+                log.error("生成应用封面失败，appId: {}, url: {}", appId, appUrl, e);
+            }
+        });
+    }
 
     @Override
     public Long createApp(AppAddRequest appAddRequest, User loginUser) {
@@ -196,8 +218,11 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App> implements AppSe
         boolean updateResult = updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
 
-        // 返回部署的 URL 地址
-        return String.format("%s/%s", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 构建应用访问 URL
+        String appDeployUrl = String.format("%s/%s", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 异步生成截图并更新应用封面
+        generateAppScreenshotAsync(appId, appDeployUrl);
+        return appDeployUrl;
     }
 
     @Override

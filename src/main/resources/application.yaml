@@ -44,3 +44,8 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+
+# 暗房图床（令牌通过环境变量 DARKROOM_TOKEN 注入；云端由网络代理注入真实令牌，这里用占位符即可）
+darkroom:
+  base-url: https://leorxx.xyz
+  token: ${DARKROOM_TOKEN:proxy-injected}

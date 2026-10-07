@@ -71,6 +71,34 @@ CFG
   chmod 600 "$LOCAL_CFG"
 fi
 
+# --- Screenshot support (Selenium): chromedriver must match the installed Chromium ---
+# WebDriverManager cannot reach googlechromelabs.github.io from the cloud sandbox, so fetch the
+# matching driver from the Chrome-for-Testing storage bucket and point the app at it via env vars.
+CHROME_BIN=/opt/pw-browsers/chromium-1194/chrome-linux/chrome
+if [ -x "$CHROME_BIN" ]; then
+  CHROME_VER="$("$CHROME_BIN" --version | grep -oE '[0-9]+(\.[0-9]+){3}')"
+  DRIVER_DIR="$HOME/.cache/chromedriver/$CHROME_VER"
+  if [ ! -x "$DRIVER_DIR/chromedriver" ]; then
+    mkdir -p "$DRIVER_DIR"
+    TMP_ZIP="$(mktemp)"
+    if curl -fsS -m 120 -o "$TMP_ZIP" \
+      "https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VER}/linux64/chromedriver-linux64.zip"; then
+      python3 -I -c "import sys,zipfile;zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$TMP_ZIP" "$DRIVER_DIR"
+      mv "$DRIVER_DIR/chromedriver-linux64/chromedriver" "$DRIVER_DIR/chromedriver"
+      chmod +x "$DRIVER_DIR/chromedriver"
+    else
+      echo "NOTE: could not download chromedriver $CHROME_VER; screenshot tests will be skipped." >&2
+    fi
+    rm -f "$TMP_ZIP"
+  fi
+  if [ -x "$DRIVER_DIR/chromedriver" ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    {
+      echo "export SCREENSHOT_CHROME_BINARY=$CHROME_BIN"
+      echo "export SCREENSHOT_CHROMEDRIVER_PATH=$DRIVER_DIR/chromedriver"
+    } >> "$CLAUDE_ENV_FILE"
+  fi
+fi
+
 # --- Helper for starting the backend without an application-local.yaml / real LLM key ---
 cat > .claude/hooks/run-backend-mock.sh <<'RUN'
 #!/bin/bash
