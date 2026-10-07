@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Modal, message } from 'ant-design-vue'
 import {
+  AimOutlined,
   ArrowLeftOutlined,
   DesktopOutlined,
   MobileOutlined,
@@ -28,6 +29,7 @@ import { useLoginUserStore } from '@/stores/loginUser'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
+import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
 import logo from '@/assets/logo.png'
 
 const route = useRoute()
@@ -230,6 +232,7 @@ const fetchAppInfo = async () => {
 
 // 进入页面：先加载应用信息和对话历史，再决定是否自动触发生成
 onMounted(async () => {
+  window.addEventListener('message', handleIframeMessage)
   await fetchAppInfo()
   if (!appInfo.value) {
     return
@@ -276,6 +279,7 @@ const closeEventSource = () => {
 
 // 离开页面时断开 SSE 连接
 onBeforeUnmount(() => {
+  window.removeEventListener('message', handleIframeMessage)
   closeEventSource()
   isBuilding.value = false
 })
@@ -363,13 +367,93 @@ const sendMessage = (content: string) => {
   }
 }
 
-// 发送输入框中的消息
-const doSend = () => {
-  const content = userInput.value.trim()
-  if (!content || inputDisabled.value) {
+// —— 可视化编辑 ——
+const previewFrameRef = ref<HTMLIFrameElement | null>(null)
+const isEditMode = ref(false)
+const selectedElement = ref<ElementInfo | null>(null)
+
+const visualEditor = new VisualEditor({
+  onElementSelected: (elementInfo) => {
+    selectedElement.value = elementInfo
+  },
+})
+
+// 仅创建者在预览就绪、且没有在生成或构建时才能进入编辑模式
+const canEdit = computed(
+  () => isOwner.value && !!previewUrl.value && !isStreaming.value && !isBuilding.value,
+)
+
+const exitEditMode = () => {
+  visualEditor.disableEditMode()
+  isEditMode.value = false
+}
+
+const toggleEditMode = () => {
+  if (isEditMode.value) {
+    exitEditMode()
     return
   }
+  visualEditor.init(previewFrameRef.value)
+  if (!visualEditor.enableEditMode()) {
+    message.warning('暂时无法进入编辑模式：预览尚未加载完成，或预览页面与主站不同源')
+    return
+  }
+  isEditMode.value = true
+}
+
+// 清除已选中的元素（同时取消预览中的选中高亮）
+const clearSelectedElement = () => {
+  selectedElement.value = null
+  visualEditor.clearSelection()
+}
+
+// 预览刷新后重新绑定 iframe，编辑模式下需要重新注入脚本
+const onPreviewLoad = () => {
+  visualEditor.init(previewFrameRef.value)
+  if (isEditMode.value) {
+    visualEditor.onIframeLoad()
+    isEditMode.value = visualEditor.editing
+  }
+}
+
+const handleIframeMessage = (event: MessageEvent) => visualEditor.handleIframeMessage(event)
+
+// 开始生成或构建后预览会被替换，自动退出编辑模式并清除选中状态
+watch([isStreaming, isBuilding], ([streaming, building]) => {
+  if ((streaming || building) && (isEditMode.value || selectedElement.value)) {
+    exitEditMode()
+    selectedElement.value = null
+  }
+})
+
+// 把选中的元素信息拼接到提示词里，让 AI 精确知道要改哪个元素
+const buildElementContext = (element: ElementInfo) => {
+  let context = '\n\n选中元素信息：'
+  if (element.pagePath) {
+    context += `\n- 页面路径: ${element.pagePath}`
+  }
+  context += `\n- 标签: ${element.tagName.toLowerCase()}\n- 选择器: ${element.selector}`
+  if (element.textContent) {
+    context += `\n- 当前内容: ${element.textContent.substring(0, 100)}`
+  }
+  return context
+}
+
+// 发送输入框中的消息
+const doSend = () => {
+  const text = userInput.value.trim()
+  if (!text || inputDisabled.value) {
+    return
+  }
+  const content = selectedElement.value ? text + buildElementContext(selectedElement.value) : text
   userInput.value = ''
+  // 发送后清除选中元素并退出编辑模式
+  if (selectedElement.value) {
+    clearSelectedElement()
+  }
+  if (isEditMode.value) {
+    exitEditMode()
+  }
   sendMessage(content)
 }
 
@@ -584,6 +668,27 @@ const doDelete = () => {
           @click="scrollToBottom"
           ><DownOutlined /> 有新内容</a-button
         >
+        <!-- 可视化编辑：已选中的元素信息 -->
+        <a-alert
+          v-if="selectedElement"
+          class="selected-element-alert"
+          type="info"
+          closable
+          @close="clearSelectedElement"
+        >
+          <template #message>
+            <div class="selected-element-info">
+              <span class="selected-element-title"
+                >已选中 &lt;{{ selectedElement.tagName.toLowerCase() }}&gt;
+                <span v-if="selectedElement.id">#{{ selectedElement.id }}</span></span
+              >
+              <span v-if="selectedElement.textContent" class="selected-element-text">{{
+                selectedElement.textContent
+              }}</span>
+              <code class="selected-element-selector">{{ selectedElement.selector }}</code>
+            </div>
+          </template>
+        </a-alert>
         <!-- 用户消息输入框 -->
         <a-tooltip :title="inputTooltip" placement="topLeft">
           <div class="input-area">
@@ -596,6 +701,23 @@ const doDelete = () => {
               aria-label="描述你想调整的内容"
               @keydown="handleInputKeydown"
             />
+            <a-tooltip
+              v-if="isOwner"
+              :title="isEditMode ? '退出编辑模式' : '进入编辑模式：点击预览中的元素，再描述修改'"
+            >
+              <a-button
+                shape="circle"
+                class="edit-btn"
+                :type="isEditMode ? 'primary' : 'default'"
+                :danger="isEditMode"
+                :disabled="!canEdit && !isEditMode"
+                :aria-label="isEditMode ? '退出编辑模式' : '进入编辑模式'"
+                :aria-pressed="isEditMode"
+                @click="toggleEditMode"
+              >
+                <template #icon><AimOutlined /></template>
+              </a-button>
+            </a-tooltip>
             <a-button
               type="primary"
               shape="circle"
@@ -659,9 +781,11 @@ const doDelete = () => {
         <div class="preview-stage" :class="{ 'mobile-preview': previewDevice === 'mobile' }">
           <iframe
             v-if="previewUrl"
+            ref="previewFrameRef"
             :src="previewUrl"
             class="preview-frame"
             title="网站预览"
+            @load="onPreviewLoad"
           ></iframe>
           <div v-else class="preview-placeholder">
             <div class="preview-empty-icon">
@@ -878,7 +1002,7 @@ const doDelete = () => {
   box-shadow: 0 0 0 3px rgb(33 107 80 / 6%);
 }
 .input-area :deep(.ant-input) {
-  padding: 2px 38px 8px 2px;
+  padding: 2px 78px 8px 2px;
   border: none;
   box-shadow: none;
   background: transparent;
@@ -888,6 +1012,36 @@ const doDelete = () => {
   position: absolute;
   right: 10px;
   bottom: 10px;
+}
+.edit-btn {
+  position: absolute;
+  right: 50px;
+  bottom: 10px;
+}
+.selected-element-alert {
+  margin-top: 10px;
+  border-radius: 12px;
+}
+.selected-element-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.selected-element-title {
+  font-weight: 600;
+}
+.selected-element-text {
+  overflow: hidden;
+  color: var(--app-muted, rgba(0, 0, 0, 0.55));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selected-element-selector {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .composer-hint {
   display: flex;
