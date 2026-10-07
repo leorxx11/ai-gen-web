@@ -14,24 +14,24 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class AiCodeGenTypeRoutingServiceTest {
 
     @Resource
-    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
+    private AiCodeGenTypeRoutingServiceFactory routingServiceFactory;
 
     @Test
     void testRouteCodeGenType() {
         String simple = "做一个简单的个人介绍页面";
-        CodeGenTypeEnum result = aiCodeGenTypeRoutingService.routeCodeGenType(simple);
+        CodeGenTypeEnum result = routingServiceFactory.createAiCodeGenTypeRoutingService().routeCodeGenType(simple);
         log.info("用户需求: {} -> {}", simple, result.getValue());
         assertNotNull(result);
         assertEquals(CodeGenTypeEnum.HTML, result);
 
         String multiPage = "做一个公司官网，需要首页、关于我们、联系我们三个页面";
-        result = aiCodeGenTypeRoutingService.routeCodeGenType(multiPage);
+        result = routingServiceFactory.createAiCodeGenTypeRoutingService().routeCodeGenType(multiPage);
         log.info("用户需求: {} -> {}", multiPage, result.getValue());
         assertNotNull(result);
         assertEquals(CodeGenTypeEnum.MULTI_FILE, result);
 
         String complex = "做一个电商管理系统，包含用户管理、商品管理、订单管理，需要路由和状态管理";
-        result = aiCodeGenTypeRoutingService.routeCodeGenType(complex);
+        result = routingServiceFactory.createAiCodeGenTypeRoutingService().routeCodeGenType(complex);
         log.info("用户需求: {} -> {}", complex, result.getValue());
         assertNotNull(result);
         assertEquals(CodeGenTypeEnum.VUE_PROJECT, result);

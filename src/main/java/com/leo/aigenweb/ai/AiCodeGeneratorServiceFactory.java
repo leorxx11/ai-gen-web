@@ -2,11 +2,13 @@ package com.leo.aigenweb.ai;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.leo.aigenweb.ai.guardrail.PromptSafetyInputGuardrail;
 import com.leo.aigenweb.ai.tools.ToolManager;
 import com.leo.aigenweb.exception.BusinessException;
 import com.leo.aigenweb.exception.ErrorCode;
 import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 import com.leo.aigenweb.service.ChatHistoryService;
+import com.leo.aigenweb.utils.SpringContextUtil;
 import dev.langchain4j.community.store.memory.chat.redis.RedisChatMemoryStore;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
@@ -24,11 +26,14 @@ import java.time.Duration;
 @Configuration
 public class AiCodeGeneratorServiceFactory {
 
-    @Resource
-    private ChatModel chatModel;
+    /**
+     * 单次对话中连续调用工具的上限。Vue 工程每个文件对应一次写入调用，所以要留够余量，
+     * 只拦截真正的死循环。
+     */
+    private static final int MAX_SEQUENTIAL_TOOLS_INVOCATIONS = 40;
 
-    @Resource
-    private StreamingChatModel openAiStreamingChatModel;
+    @Resource(name = "openAiChatModel")
+    private ChatModel chatModel;
 
     @Resource
     private RedisChatMemoryStore redisChatMemoryStore;
@@ -91,21 +96,33 @@ public class AiCodeGeneratorServiceFactory {
         chatHistoryService.loadChatHistoryToMemory(appId, chatMemory, 20);
 
         return switch (codeGenTypeEnum) {
-            case VUE_PROJECT -> AiServices.builder(AiCodeGeneratorService.class)
-                    .streamingChatModel(openAiStreamingChatModel)
-                    .chatMemoryProvider(memoryId -> chatMemory)
-                    .tools(toolManager.getAllTools())
-                    .hallucinatedToolNameStrategy(toolExecutionRequest ->
-                            ToolExecutionResultMessage.from(toolExecutionRequest,
-                                    "Error: there is no tool called "
-                                            + toolExecutionRequest.name()))
-                    .build();
-
-            case HTML, MULTI_FILE -> AiServices.builder(AiCodeGeneratorService.class)
-                    .chatModel(chatModel)
-                    .streamingChatModel(openAiStreamingChatModel)
-                    .chatMemory(chatMemory)
-                    .build();
+            case VUE_PROJECT -> {
+                // 多例模型：每个 AI 服务独占一个模型实例，避免并发请求互相阻塞
+                StreamingChatModel reasoningStreamingChatModel = SpringContextUtil
+                        .getBean("reasoningStreamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
+                        .streamingChatModel(reasoningStreamingChatModel)
+                        .chatMemoryProvider(memoryId -> chatMemory)
+                        .tools(toolManager.getAllTools())
+                        // 限制连续调用工具的次数，防止模型陷入工具调用死循环
+                        .maxSequentialToolsInvocations(MAX_SEQUENTIAL_TOOLS_INVOCATIONS)
+                        .hallucinatedToolNameStrategy(toolExecutionRequest ->
+                                ToolExecutionResultMessage.from(toolExecutionRequest,
+                                        "Error: there is no tool called "
+                                                + toolExecutionRequest.name()))
+                        .inputGuardrails(new PromptSafetyInputGuardrail())
+                        .build();
+            }
+            case HTML, MULTI_FILE -> {
+                StreamingChatModel streamingChatModel = SpringContextUtil
+                        .getBean("streamingChatModelPrototype", StreamingChatModel.class);
+                yield AiServices.builder(AiCodeGeneratorService.class)
+                        .chatModel(chatModel)
+                        .streamingChatModel(streamingChatModel)
+                        .chatMemory(chatMemory)
+                        .inputGuardrails(new PromptSafetyInputGuardrail())
+                        .build();
+            }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,"不支持的代码生成类型"
                     +  codeGenTypeEnum.getValue());
         };

@@ -61,9 +61,13 @@ public class JsonMessageStreamHandler {
                     String aiResponse = chatHistoryStringBuilder.toString();
                     chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
 
-                    // 异步构建 vue 项目
+                    // 同步构建 Vue 项目：构建完成后才结束流，用户看到“生成完成”时预览一定是最新的
                     String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + "/vue_project_" + appId;
-                    vueProjectBuilder.buildProjectAsync(projectPath);
+                    try {
+                        vueProjectBuilder.buildProject(projectPath);
+                    } catch (Exception e) {
+                        log.error("构建 Vue 项目时发生异常: {}", e.getMessage(), e);
+                    }
                 })
                 .doOnError(error -> {
                     // 如果AI回复失败，也要记录错误消息

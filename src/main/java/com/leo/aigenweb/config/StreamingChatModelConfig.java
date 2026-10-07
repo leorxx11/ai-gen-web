@@ -9,12 +9,15 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
 /**
- * 推理流式对话模型（多例），用于 Vue 工程这类需要工具调用的复杂代码生成任务。
+ * 通用流式对话模型（多例）。
+ * <p>
+ * 单例的 ChatModel 在底层同步解析数据流，多个请求共用一个实例会串行执行；
+ * 声明为 prototype 后，每次从容器获取都是全新实例，AI 服务之间互不阻塞。
  */
 @Configuration
-@ConfigurationProperties(prefix = "langchain4j.open-ai.reasoning-streaming-chat-model")
+@ConfigurationProperties(prefix = "langchain4j.open-ai.streaming-chat-model")
 @Data
-public class ReasoningStreamingChatModelConfig {
+public class StreamingChatModelConfig {
 
     private String baseUrl;
 
@@ -32,7 +35,7 @@ public class ReasoningStreamingChatModelConfig {
 
     @Bean
     @Scope("prototype")
-    public StreamingChatModel reasoningStreamingChatModelPrototype() {
+    public StreamingChatModel streamingChatModelPrototype() {
         return OpenAiStreamingChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)

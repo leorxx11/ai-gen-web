@@ -1,6 +1,7 @@
 package com.leo.aigenweb.langgraph4j.node;
 
 import com.leo.aigenweb.ai.AiCodeGenTypeRoutingService;
+import com.leo.aigenweb.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.leo.aigenweb.langgraph4j.state.WorkflowContext;
 import com.leo.aigenweb.model.enums.CodeGenTypeEnum;
 import com.leo.aigenweb.utils.SpringContextUtil;
@@ -25,7 +26,9 @@ public class RouterNode {
             log.info("执行节点: 智能路由");
             CodeGenTypeEnum generationType;
             try {
-                AiCodeGenTypeRoutingService routingService = SpringContextUtil.getBean(AiCodeGenTypeRoutingService.class);
+                // 每次新建路由服务（内部使用多例模型），并发执行的工作流之间不会互相阻塞
+                AiCodeGenTypeRoutingServiceFactory routingServiceFactory = SpringContextUtil.getBean(AiCodeGenTypeRoutingServiceFactory.class);
+                AiCodeGenTypeRoutingService routingService = routingServiceFactory.createAiCodeGenTypeRoutingService();
                 generationType = routingService.routeCodeGenType(context.getOriginalPrompt());
                 log.info("AI智能路由完成，选择类型: {} ({})", generationType.getValue(), generationType.getText());
             } catch (Exception e) {

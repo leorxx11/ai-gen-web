@@ -25,8 +25,34 @@ spring:
       database: 0
 
 
+# AI 模型配置：密钥、地址由 application-local.yaml（或命令行参数）里的 chat-model 提供，
+# 推理模型与路由模型默认沿用它们，需要单独指定时直接覆盖对应字段即可。
+langchain4j:
+  open-ai:
+    streaming-chat-model:
+      base-url: ${langchain4j.open-ai.chat-model.base-url}
+      api-key: ${langchain4j.open-ai.chat-model.api-key}
+      model-name: ${langchain4j.open-ai.chat-model.model-name}
+    # 推理模型：Vue 工程等复杂代码生成，输出长、需要稳定
+    reasoning-streaming-chat-model:
+      base-url: ${langchain4j.open-ai.chat-model.base-url}
+      api-key: ${langchain4j.open-ai.chat-model.api-key}
+      model-name: ${langchain4j.open-ai.chat-model.model-name}
+      max-tokens: 32768
+      temperature: 0.1
+    # 路由模型：只做“选哪种生成方式”的分类，输出很短；可换成更便宜的模型降低成本
+    routing-chat-model:
+      base-url: ${langchain4j.open-ai.chat-model.base-url}
+      api-key: ${langchain4j.open-ai.chat-model.api-key}
+      model-name: ${langchain4j.open-ai.chat-model.model-name}
+      max-tokens: 100
+
 server:
   port: 8123
+  # 部署在 Nginx 等反向代理之后时，用 X-Forwarded-For 还原真实客户端 IP（Tomcat 只信任内网代理，外部伪造无效）
+  tomcat:
+    remoteip:
+      remote-ip-header: X-Forwarded-For
   servlet:
     context-path: /api
     session:

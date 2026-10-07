@@ -21,6 +21,9 @@ import com.mybatisflex.core.paginate.Page;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import com.leo.aigenweb.ratelimit.annotation.RateLimit;
+import com.leo.aigenweb.ratelimit.enums.RateLimitType;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
@@ -42,6 +45,11 @@ import java.util.Map;
 @RestController
 @RequestMapping("/app")
 public class AppController {
+
+    /**
+     * 对话提示词长度上限（输入框 1000 字 + 选中元素信息）
+     */
+    private static final int MAX_CHAT_MESSAGE_LENGTH = 2000;
 
     @Resource
     private AppService appService;
@@ -95,12 +103,17 @@ public class AppController {
      * @param request HttpServletRequest
      * @return 生成的代码流
      */
-    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE) //
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    // AI 对话成本最高：每个用户 60 秒内最多发起 5 次
+    @RateLimit(key = "chat", limitType = RateLimitType.USER, rate = 5, rateInterval = 60,
+            message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                                        @RequestParam String message,
                                                        HttpServletRequest request) {
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "提示词不能为空");
+        // 输入框限制 1000 字，再留出选中元素信息的余量；防止绕过前端直接提交超长内容
+        ThrowUtils.throwIf(message.length() > MAX_CHAT_MESSAGE_LENGTH, ErrorCode.PARAMS_ERROR, "提示词过长");
         // 获取登录用户
         User loginUser = userService.getLoginUser(request);
         // SSE 流式返回
@@ -264,6 +277,12 @@ public class AppController {
      * @return 应用封装类分页
      */
     @PostMapping("/good/list/page/vo")
+    // 旁路缓存：只缓存前 10 页（绝大多数用户只看前几页），5 分钟后自动过期
+    @Cacheable(
+            value = "good_app_page",
+            key = "T(com.leo.aigenweb.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
+            condition = "#appQueryRequest != null && #appQueryRequest.pageNum <= 10"
+    )
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
         // 限制每页最多 20 个

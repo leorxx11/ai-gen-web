@@ -1,27 +1,24 @@
 package com.leo.aigenweb.ai;
 
+import com.leo.aigenweb.utils.SpringContextUtil;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
-import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
 /**
  * AI 代码生成类型路由服务工厂
  */
 @Slf4j
-@Configuration
+@Component
 public class AiCodeGenTypeRoutingServiceFactory {
 
-    @Resource
-    private ChatModel chatModel;
-
     /**
-     * 创建 AI 代码生成类型路由服务实例
+     * 创建 AI 代码生成类型路由服务实例。
+     * 每次都取一个新的多例路由模型，多个请求并发路由时不会互相阻塞。
      */
-    @Bean
-    public AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService() {
+    public AiCodeGenTypeRoutingService createAiCodeGenTypeRoutingService() {
+        ChatModel chatModel = SpringContextUtil.getBean("routingChatModelPrototype", ChatModel.class);
         return AiServices.builder(AiCodeGenTypeRoutingService.class)
                 .chatModel(chatModel)
                 .build();

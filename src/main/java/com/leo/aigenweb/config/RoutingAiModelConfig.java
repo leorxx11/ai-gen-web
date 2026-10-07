@@ -1,7 +1,7 @@
 package com.leo.aigenweb.config;
 
-import dev.langchain4j.model.chat.StreamingChatModel;
-import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.openai.OpenAiChatModel;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -9,12 +9,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
 /**
- * 推理流式对话模型（多例），用于 Vue 工程这类需要工具调用的复杂代码生成任务。
+ * 智能路由专用对话模型（多例）。路由只做简单分类，单独配置便宜、输出短的模型即可。
  */
 @Configuration
-@ConfigurationProperties(prefix = "langchain4j.open-ai.reasoning-streaming-chat-model")
+@ConfigurationProperties(prefix = "langchain4j.open-ai.routing-chat-model")
 @Data
-public class ReasoningStreamingChatModelConfig {
+public class RoutingAiModelConfig {
 
     private String baseUrl;
 
@@ -32,8 +32,8 @@ public class ReasoningStreamingChatModelConfig {
 
     @Bean
     @Scope("prototype")
-    public StreamingChatModel reasoningStreamingChatModelPrototype() {
-        return OpenAiStreamingChatModel.builder()
+    public ChatModel routingChatModelPrototype() {
+        return OpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .apiKey(apiKey)
                 .modelName(modelName)

@@ -357,6 +357,19 @@ const sendMessage = (content: string) => {
       message.success('网站生成完成')
     }
   })
+  // 后端的业务错误（限流、护轨拦截等）：在进入流之前就被拒绝，用 business-error 事件把具体原因带回来
+  eventSource.addEventListener('business-error', (event) => {
+    let errorMessage = '生成过程中出现错误'
+    try {
+      errorMessage = JSON.parse((event as MessageEvent).data).message || errorMessage
+    } catch (e) {
+      console.error('解析业务错误事件失败:', e)
+    }
+    finishStream()
+    generationError.value = errorMessage
+    aiMessage.content = `❌ ${errorMessage}`
+    message.error(errorMessage)
+  })
   eventSource.onerror = () => {
     finishStream()
     generationError.value = '本次生成未完成'

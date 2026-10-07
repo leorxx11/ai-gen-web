@@ -2,6 +2,7 @@ package com.leo.aigenweb.langgraph4j;
 
 import cn.hutool.core.io.FileUtil;
 import com.leo.aigenweb.ai.AiCodeGenTypeRoutingService;
+import com.leo.aigenweb.ai.AiCodeGenTypeRoutingServiceFactory;
 import com.leo.aigenweb.constant.AppConstant;
 import com.leo.aigenweb.core.AiCodeGeneratorFacade;
 import com.leo.aigenweb.langgraph4j.ai.CodeQualityCheckService;
@@ -40,7 +41,8 @@ class CodeGenWorkflowImageDisabledTest {
     @MockitoBean
     private ImageCollectionPlanService planService;
     @MockitoBean
-    private AiCodeGenTypeRoutingService routingService;
+    private AiCodeGenTypeRoutingServiceFactory routingServiceFactory;
+    private final AiCodeGenTypeRoutingService routingService = mock(AiCodeGenTypeRoutingService.class);
     @MockitoBean
     private CodeQualityCheckService qualityService;
     @MockitoBean
@@ -56,6 +58,7 @@ class CodeGenWorkflowImageDisabledTest {
 
     @BeforeEach
     void stub() {
+        when(routingServiceFactory.createAiCodeGenTypeRoutingService()).thenReturn(routingService);
         when(routingService.routeCodeGenType(anyString())).thenReturn(CodeGenTypeEnum.HTML);
         when(qualityService.checkCodeQuality(anyString())).thenReturn(QualityResult.builder().isValid(true).build());
         when(facade.generateAndSaveCodeStream(anyString(), any(CodeGenTypeEnum.class), anyLong())).thenAnswer(inv -> {

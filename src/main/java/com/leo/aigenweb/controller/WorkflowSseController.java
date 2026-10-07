@@ -9,6 +9,8 @@ import com.leo.aigenweb.langgraph4j.AbstractCodeGenWorkflow;
 import com.leo.aigenweb.langgraph4j.CodeGenConcurrentWorkflow;
 import com.leo.aigenweb.langgraph4j.CodeGenWorkflow;
 import com.leo.aigenweb.langgraph4j.state.WorkflowContext;
+import com.leo.aigenweb.ratelimit.annotation.RateLimit;
+import com.leo.aigenweb.ratelimit.enums.RateLimitType;
 import com.leo.aigenweb.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,6 +48,8 @@ public class WorkflowSseController {
      * 同步执行工作流，执行完成后返回摘要信息（不返回服务器目录等内部信息）
      */
     @PostMapping("/execute")
+    @RateLimit(key = "workflow", limitType = RateLimitType.USER, rate = 3, rateInterval = 60,
+            message = "工作流执行过于频繁，请稍后再试")
     public BaseResponse<Map<String, Object>> executeWorkflow(@RequestParam String prompt,
                                                              @RequestParam(defaultValue = "true") boolean concurrent,
                                                              HttpServletRequest request) {
@@ -65,6 +69,8 @@ public class WorkflowSseController {
      * （workflow_start / step_completed / workflow_completed / workflow_error）
      */
     @GetMapping(value = "/execute-flux", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(key = "workflow", limitType = RateLimitType.USER, rate = 3, rateInterval = 60,
+            message = "工作流执行过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> executeWorkflowWithFlux(@RequestParam String prompt,
                                                                  @RequestParam(defaultValue = "true") boolean concurrent,
                                                                  HttpServletRequest request) {
