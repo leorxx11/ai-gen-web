@@ -52,6 +52,12 @@ darkroom:
 
 # 工作流
 workflow:
+  cleanup:
+    # 孤儿代码目录清理：工作流每次执行都会生成一个不对应任何应用的代码目录，被删除的应用也会留下目录，定时回收。
+    # 只删除数据库里没有对应应用、且修改时间超过 ttl-hours 的 tmp/code_output 下的目录。
+    enabled: true
+    ttl-hours: 24
+    cron: "0 15 * * * ?"
   image-collection:
     # 是否在代码生成工作流中加入“图片收集”步骤（AI 规划图片 + 并发收集素材 + 拼进提示词）。
     # 默认开启。内容图片来源为 Pixabay（需配置 PIXABAY_API_KEY，未配置时该工具会自动跳过）；
