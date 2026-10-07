@@ -50,6 +50,12 @@
             <artifactId>mybatis-flex-codegen</artifactId>
             <version>1.11.0</version>
         </dependency>
+        <!-- LangGraph4j 工作流（严格使用教程验证过的版本） -->
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-core</artifactId>
+            <version>1.6.0-rc2</version>
+        </dependency>
         <!-- Selenium 网页截图依赖 -->
         <dependency>
             <groupId>org.seleniumhq.selenium</groupId>

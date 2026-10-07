@@ -49,3 +49,12 @@ knife4j:
 darkroom:
   base-url: https://leorxx.xyz
   token: ${DARKROOM_TOKEN:proxy-injected}
+
+# 工作流图片收集所用的外部服务（密钥通过环境变量注入；云端可用网络代理注入，这里用占位符即可）
+# Pexels 内容图片搜索
+pexels:
+  api-key: ${PEXELS_API_KEY:proxy-injected}
+# 阿里云百炼 DashScope（Logo 文生图）
+dashscope:
+  api-key: ${DASHSCOPE_API_KEY:proxy-injected}
+  image-model: wan2.2-t2i-flash
