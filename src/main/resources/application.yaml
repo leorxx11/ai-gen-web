@@ -59,9 +59,10 @@ workflow:
 
 # 以下为图片收集所用的外部服务，仅在 workflow.image-collection.enabled=true 时才会用到。
 # 密钥通过环境变量注入；未配置（为空）时对应工具会直接跳过，不会发出请求。
-# Pexels 内容图片搜索
-pexels:
-  api-key: ${PEXELS_API_KEY:}
+# Pixabay 内容图片搜索（免费 API Key，在 https://pixabay.com/api/docs/ 登录后获取）。
+# 密钥只能放在 URL 查询参数里，无法由网络代理注入请求头，请通过环境变量 PIXABAY_API_KEY 提供。
+pixabay:
+  api-key: ${PIXABAY_API_KEY:}
 # 阿里云百炼 DashScope（Logo 文生图）
 dashscope:
   api-key: ${DASHSCOPE_API_KEY:}

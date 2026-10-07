@@ -61,42 +61,79 @@ class ImageToolsTest {
         return manager;
     }
 
-    // ---------- Pexels ----------
+    // ---------- Pixabay ----------
 
     @Test
-    void imageSearchParsesPhotosAndSendsKey() {
-        AtomicReference<String> auth = new AtomicReference<>();
+    void imageSearchDownloadsHitsAndRehostsToDarkroom() {
         AtomicReference<String> query = new AtomicReference<>();
-        server.createContext("/v1/search", ex -> {
-            auth.set(ex.getRequestHeaders().getFirst("Authorization"));
+        AtomicInteger downloads = new AtomicInteger();
+        AtomicInteger uploads = new AtomicInteger();
+        server.createContext("/api/", ex -> {
             query.set(ex.getRequestURI().getQuery());
-            reply(ex, 200, "{\"photos\":[{\"alt\":\"a cat\",\"src\":{\"medium\":\"https://img/1.jpg\"}},"
-                    + "{\"alt\":\"\",\"src\":{\"medium\":\"https://img/2.jpg\"}},{\"src\":{}}]}");
+            reply(ex, 200, "{\"hits\":["
+                    + "{\"tags\":\"coffee, cup\",\"webformatURL\":\"" + base + "/img/1.jpg\"},"
+                    + "{\"tags\":\"\",\"webformatURL\":\"" + base + "/img/2.jpg\"},"
+                    + "{\"tags\":\"no-url\"}]}");
         });
-        ImageSearchTool tool = new ImageSearchTool();
-        ReflectionTestUtils.setField(tool, "pexelsBaseUrl", base);
-        ReflectionTestUtils.setField(tool, "pexelsApiKey", "key-123");
+        server.createContext("/img/", ex -> {
+            downloads.incrementAndGet();
+            reply(ex, 200, "JPEGDATA");
+        });
+        server.createContext("/api/v1/upload", ex -> {
+            ex.getRequestBody().readAllBytes();
+            reply(ex, 200, "{\"image\":{\"url\":\"https://img.mine/" + uploads.incrementAndGet() + ".jpg\"}}");
+        });
+        ImageSearchTool tool = pixabayTool("key-123");
 
-        List<ImageResource> images = tool.searchContentImages("cat");
+        List<ImageResource> images = tool.searchContentImages("coffee");
 
-        assertEquals(2, images.size());
+        assertEquals(2, images.size(), "没有 webformatURL 的结果应被跳过");
         assertEquals(ImageCategoryEnum.CONTENT, images.get(0).getCategory());
-        assertEquals("a cat", images.get(0).getDescription());
-        assertEquals("cat", images.get(1).getDescription(), "alt 为空时回退为搜索词");
-        assertEquals("key-123", auth.get());
-        assertTrue(query.get().contains("query=cat"));
+        assertTrue(images.stream().allMatch(i -> i.getUrl().startsWith("https://img.mine/")), "应返回转存后的图床地址，而不是 Pixabay 地址");
+        assertTrue(images.stream().anyMatch(i -> "coffee, cup".equals(i.getDescription())));
+        assertTrue(images.stream().anyMatch(i -> "coffee".equals(i.getDescription())), "tags 为空时回退为搜索词");
+        assertEquals(2, downloads.get());
+        assertTrue(query.get().contains("key=key-123") && query.get().contains("q=coffee"), query.get());
+        assertTrue(query.get().contains("safesearch=true"), query.get());
     }
 
     @Test
-    void imageSearchReturnsEmptyOnErrorOrMissingKey() {
-        server.createContext("/v1/search", ex -> reply(ex, 401, "{}"));
+    void imageSearchSkipsFailedUploadsAndReturnsEmptyOnErrorOrMissingKey() {
+        server.createContext("/api/v1/upload", ex -> {
+            ex.getRequestBody().readAllBytes();
+            reply(ex, 401, "{}");
+        });
+        server.createContext("/img/", ex -> reply(ex, 200, "JPEGDATA"));
+        server.createContext("/api/", ex -> reply(ex, 200,
+                "{\"hits\":[{\"tags\":\"a\",\"webformatURL\":\"" + base + "/img/1.jpg\"}]}"));
+        // 图床上传失败：该图片被跳过，不抛异常
+        assertTrue(pixabayTool("key").searchContentImages("cat").isEmpty());
+        // 没有 key、关键词为空：不发请求
+        assertTrue(pixabayTool("").searchContentImages("cat").isEmpty());
+        assertTrue(pixabayTool("key").searchContentImages(" ").isEmpty());
+    }
+
+    @Test
+    void imageSearchApiErrorReturnsEmpty() {
+        server.createContext("/api/", ex -> reply(ex, 400, "[ERROR 400] Invalid or missing API key"));
+        assertTrue(pixabayTool("secret-key").searchContentImages("cat").isEmpty());
+    }
+
+    private ImageSearchTool pixabayTool(String key) {
         ImageSearchTool tool = new ImageSearchTool();
-        ReflectionTestUtils.setField(tool, "pexelsBaseUrl", base);
-        ReflectionTestUtils.setField(tool, "pexelsApiKey", "bad");
-        assertTrue(tool.searchContentImages("cat").isEmpty());
-        ReflectionTestUtils.setField(tool, "pexelsApiKey", "");
-        assertTrue(tool.searchContentImages("cat").isEmpty());
-        assertTrue(tool.searchContentImages(" ").isEmpty());
+        ReflectionTestUtils.setField(tool, "pixabayBaseUrl", base);
+        ReflectionTestUtils.setField(tool, "pixabayApiKey", key);
+        ReflectionTestUtils.setField(tool, "darkroomManager", darkroomManagerFor("/api/v1/upload"));
+        return tool;
+    }
+
+    private DarkroomManager darkroomManagerFor(String ignored) {
+        DarkroomConfig config = new DarkroomConfig();
+        config.setBaseUrl(base);
+        config.setToken("t");
+        DarkroomManager manager = new DarkroomManager();
+        ReflectionTestUtils.setField(manager, "darkroomConfig", config);
+        return manager;
     }
 
     // ---------- unDraw ----------
