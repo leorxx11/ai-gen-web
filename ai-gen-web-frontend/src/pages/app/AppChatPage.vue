@@ -11,6 +11,7 @@ import {
   CloudUploadOutlined,
   DeleteOutlined,
   DownOutlined,
+  DownloadOutlined,
   EditOutlined,
   ExportOutlined,
   InfoCircleOutlined,
@@ -392,6 +393,42 @@ const doDeploy = async () => {
   }
 }
 
+// —— 下载代码 ——
+const downloading = ref(false)
+
+const downloadCode = async () => {
+  downloading.value = true
+  try {
+    // 后端直接返回文件流，这里用 fetch 读取响应并从响应头取文件名
+    const response = await fetch(`${API_BASE_URL}/app/download/${appId}`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    const contentType = response.headers.get('Content-Type') || ''
+    if (!response.ok || contentType.includes('application/json')) {
+      // 业务异常时后端返回 JSON
+      const body = contentType.includes('application/json')
+        ? await response.json().catch(() => null)
+        : null
+      throw new Error(body?.message || `下载失败: ${response.status}`)
+    }
+    const contentDisposition = response.headers.get('Content-Disposition')
+    const fileName = contentDisposition?.match(/filename="(.+)"/)?.[1] || `app-${appId}.zip`
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(downloadUrl)
+    message.success('代码下载成功')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '下载失败，请重试')
+  } finally {
+    downloading.value = false
+  }
+}
+
 // —— 应用详情 / 修改 / 删除 ——
 const detailModalOpen = ref(false)
 
@@ -460,16 +497,25 @@ const doDelete = () => {
           ><span></span>{{ statusText }}</span
         >
       </div>
-      <a-button
-        v-if="isOwner"
-        type="primary"
-        :loading="deploying"
-        :disabled="isStreaming || isBuilding || !previewUrl"
-        @click="doDeploy"
-      >
-        <template #icon><CloudUploadOutlined /></template>
-        部署
-      </a-button>
+      <a-space v-if="isOwner">
+        <a-button
+          :loading="downloading"
+          :disabled="isStreaming || isBuilding || !previewUrl"
+          @click="downloadCode"
+        >
+          <template #icon><DownloadOutlined /></template>
+          下载代码
+        </a-button>
+        <a-button
+          type="primary"
+          :loading="deploying"
+          :disabled="isStreaming || isBuilding || !previewUrl"
+          @click="doDeploy"
+        >
+          <template #icon><CloudUploadOutlined /></template>
+          部署
+        </a-button>
+      </a-space>
     </div>
 
     <div class="mobile-workspace-switch">
